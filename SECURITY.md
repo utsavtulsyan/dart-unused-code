@@ -2,40 +2,27 @@
 
 ## Supported Versions
 
-Currently supported versions of Dart Unused Code:
+| Version | Status |
+|---------|--------|
+| 0.1.x   | ✅ Supported |
 
-| Version | Supported          |
-| ------- | ------------------ |
-| 0.1.x   | :white_check_mark: |
+## Reporting Vulnerabilities
 
-## Reporting a Vulnerability
+**DO NOT** create public issues.
 
-If you discover a security vulnerability in this extension, please report it by:
+**Email:** utsavtulsyan44@gmail.com
 
-1. **DO NOT** create a public GitHub issue
-2. Email the maintainer directly at [utsavtulsyan44@gmail.com]
-3. Include detailed information:
-   - Description of the vulnerability
-   - Steps to reproduce
-   - Potential impact
-   - Suggested fix (if any)
+Include: description, reproduction steps, impact, suggested fix (optional)
 
-You can expect:
-- Acknowledgment within 48 hours
-- Regular updates on the progress
-- Credit for the discovery (if desired)
+Response within 48 hours.
 
-## Security Best Practices
+## Privacy
 
 This extension:
-- Does not collect or transmit any user data
-- Runs entirely locally within VS Code
-- Only reads Dart source files in your workspace
-- Does not make any network requests
-- Does not execute arbitrary code from analyzed files
+- Runs 100% locally
+- No network requests
+- No data collection
+- Only reads Dart files in workspace
+- No arbitrary code execution
 
-## Disclosure Policy
-
-- Security issues will be fixed as quickly as possible
-- A security advisory will be published after a fix is available
-- Users will be notified via GitHub releases and the VS Code Marketplace
+Security fixes released promptly via GitHub and VS Code Marketplace.

@@ -23,6 +23,11 @@ jobs:
         node-version: ${{ matrix.node-version }}
         cache: 'npm'
     
+    - name: Setup Dart SDK
+      uses: dart-lang/setup-dart@v1
+      with:
+        sdk: stable
+    
     - name: Install dependencies
       run: npm ci
     
@@ -41,6 +46,14 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y xvfb libxkbfile-dev pkg-config libsecret-1-dev libxss1 dbus xauth libgtk-3-0 libgbm1
         sudo /usr/bin/Xvfb :99 -screen 0 1024x768x24 > /dev/null 2>&1 &
+    
+    - name: Verify Dart SDK
+      run: dart --version
+    
+    - name: Pre-download VS Code Dart extension
+      run: |
+        mkdir -p ~/.vscode-test/extensions
+        echo "VS Code test runner will install Dart extension automatically"
     
     - name: Run tests
       run: npm test

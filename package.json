@@ -45,6 +45,9 @@
   "engines": {
     "vscode": "^1.105.0"
   },
+  "extensionDependencies": [
+    "dart-code.dart-code"
+  ],
   "categories": [
     "Linters",
     "Programming Languages"

@@ -7,7 +7,9 @@ export default defineConfig({
 			files: 'out/test/unit/**/*.test.js',
 			workspaceFolder: './src/test/test-project',
 			extensionDevelopmentPath: '.',
-			extensionTestsEnv: { DART_CODE_EXTENSION: 'true' },
+			extensionTestsEnv: { 
+				DART_CODE_EXTENSION: 'true'
+			},
 			installExtensions: ['dart-code.dart-code'],
 			launchArgs: [
 				'--skip-welcome',
@@ -25,7 +27,9 @@ export default defineConfig({
 			files: 'out/test/integration/**/*.test.js',
 			workspaceFolder: './src/test/test-project',
 			extensionDevelopmentPath: '.',
-			extensionTestsEnv: { DART_CODE_EXTENSION: 'true' },
+			extensionTestsEnv: { 
+				DART_CODE_EXTENSION: 'true'
+			},
 			installExtensions: ['dart-code.dart-code'],
 			launchArgs: [
 				'--skip-welcome',

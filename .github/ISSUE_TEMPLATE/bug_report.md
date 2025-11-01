@@ -20,7 +20,7 @@ What's broken?
 ## Environment
 - OS: [macOS 14, Windows 11, etc.]
 - VS Code: [1.85.0]
-- Extension: [0.1.0]
+- Extension: [1.0.0]
 - Dart SDK: [3.2.0]
 
 ## Code Sample

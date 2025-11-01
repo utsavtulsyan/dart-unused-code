@@ -167,14 +167,20 @@ jobs:
         VERSION=$(node -p "require('./package.json').version")
         DATE=$(date +%Y-%m-%d)
         
-        # Create the new changelog entry
-        CHANGELOG_CONTENT="${{ inputs.changelog }}"
+        # Create temp file with new changelog section
+        cat > /tmp/new_section.md << 'EOF'
+        ## [$VERSION] - $DATE
+        ${{ inputs.changelog }}
         
-        # Escape special characters for sed
-        CHANGELOG_ESCAPED=$(echo "$CHANGELOG_CONTENT" | sed 's/[&/\]/\\&/g')
+        EOF
         
-        # Insert new version section with provided changelog
-        sed -i "s/## \[Unreleased\]/## [Unreleased]\n\n## [$VERSION] - $DATE\n$CHANGELOG_ESCAPED/" CHANGELOG.md
+        # Replace placeholders
+        sed -i "s/\$VERSION/$VERSION/g" /tmp/new_section.md
+        sed -i "s/\$DATE/$DATE/g" /tmp/new_section.md
+        
+        # Insert new section after [Unreleased]
+        awk '/## \[Unreleased\]/ {print; print ""; system("cat /tmp/new_section.md"); next}1' CHANGELOG.md > /tmp/CHANGELOG_new.md
+        mv /tmp/CHANGELOG_new.md CHANGELOG.md
         
         git add CHANGELOG.md
         git commit -m "docs: update CHANGELOG for v$VERSION" || true
@@ -263,6 +269,8 @@ jobs:
       (github.event_name == 'release') ||
       (github.event_name == 'workflow_dispatch' && inputs.version != 'none')
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     environment:
       name: marketplace-release
       url: https://marketplace.visualstudio.com/items?itemName=utsavtulsyan.dart-unused-code

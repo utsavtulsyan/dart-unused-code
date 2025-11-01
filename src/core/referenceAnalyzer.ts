@@ -55,14 +55,15 @@ export class ReferenceAnalyzer {
             );            this.logger.trace(` ${methodIdentifier}: ${filteredReferences.length} non-excluded references`);
 
             // Separate definition from actual usage references
-            // Normalize paths using URI for cross-platform comparison
-            const methodUri = vscode.Uri.file(method.filePath).toString();
+            // Convert method.filePath to URI and use fsPath for consistent cross-platform comparison
+            // This ensures both paths go through the same normalization process
+            const methodFsPath = vscode.Uri.file(method.filePath).fsPath;
             const definitionReferences = filteredReferences.filter(ref => 
-                ref.uri.toString() === methodUri && 
+                ref.uri.fsPath === methodFsPath && 
                 ref.range.start.line === method.range.start.line
             );
             const usageReferences = filteredReferences.filter(ref => 
-                !(ref.uri.toString() === methodUri && ref.range.start.line === method.range.start.line)
+                !(ref.uri.fsPath === methodFsPath && ref.range.start.line === method.range.start.line)
             );
 
             this.logger.trace(` ${methodIdentifier}: ${definitionReferences.length} definition(s), ${usageReferences.length} usage(s)`);

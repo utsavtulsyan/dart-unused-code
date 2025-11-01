@@ -60,7 +60,9 @@ export class FileSystemUtils {
      */
     static shouldExclude(filePath: string, rootPath: string, patterns: string[]): boolean {
         const relativePath = path.relative(rootPath, filePath);
-        return patterns.some(pattern => minimatch(relativePath, pattern));
+        // Normalize to forward slashes for consistent glob matching across platforms
+        const normalizedPath = relativePath.split(path.sep).join('/');
+        return patterns.some(pattern => minimatch(normalizedPath, pattern));
     }
 
 

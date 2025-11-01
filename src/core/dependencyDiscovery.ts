@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import * as path from 'path';
 import { DartPackageUtils } from '../shared/utils/dartPackageUtils';
 import { Logger } from '../shared/types';
 
@@ -26,7 +27,7 @@ export class DependencyDiscovery {
         workspacePath: string
     ): Promise<Set<string>> {
         const dependencies = new Set<string>();
-        const documentDir = document.uri.fsPath.substring(0, document.uri.fsPath.lastIndexOf('/'));
+        const documentDir = path.dirname(document.uri.fsPath);
         
         try {
             // Scan only the first ~100 lines where imports typically appear
@@ -117,25 +118,12 @@ export class DependencyDiscovery {
             // Remove any query parameters or fragments
             const cleanPath = importPath.split('?')[0].split('#')[0];
             
-            // Join with document directory
-            let resolvedPath = `${documentDir}/${cleanPath}`;
+            // Convert forward slashes to platform-specific separators
+            const platformPath = cleanPath.split('/').join(path.sep);
             
-            // Normalize the path (resolve .. and .)
-            const parts = resolvedPath.split('/');
-            const normalized: string[] = [];
-            
-            for (const part of parts) {
-                if (part === '..') {
-                    if (normalized.length > 0) {
-                        normalized.pop();
-                    }
-                } else if (part !== '.' && part !== '') {
-                    normalized.push(part);
-                }
-            }
-            
-            // Rebuild absolute path with leading /
-            resolvedPath = '/' + normalized.join('/');
+            // Join with document directory and normalize
+            let resolvedPath = path.join(documentDir, platformPath);
+            resolvedPath = path.normalize(resolvedPath);
             
             // Add .dart extension if not present
             if (!resolvedPath.endsWith('.dart')) {
@@ -176,8 +164,11 @@ export class DependencyDiscovery {
                 return null;
             }
             
-            // Convert to source directory path
-            let resolvedPath = `${workspacePath}/${this.sourceDirectory}/${relativePath}`;
+            // Convert forward slashes to platform-specific separators
+            const platformRelativePath = relativePath.split('/').join(path.sep);
+            
+            // Convert to source directory path using path.join for cross-platform compatibility
+            let resolvedPath = path.join(workspacePath, this.sourceDirectory, platformRelativePath);
             
             // Add .dart extension if not present
             if (!resolvedPath.endsWith('.dart')) {
@@ -196,7 +187,7 @@ export class DependencyDiscovery {
      */
     private async getPackageName(workspacePath: string): Promise<string | null> {
         try {
-            const pubspecPath = `${workspacePath}/pubspec.yaml`;
+            const pubspecPath = path.join(workspacePath, 'pubspec.yaml');
             const uri = vscode.Uri.file(pubspecPath);
             const document = await vscode.workspace.openTextDocument(uri);
             

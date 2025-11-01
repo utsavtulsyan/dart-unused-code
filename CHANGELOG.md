@@ -9,7 +9,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/) | Versioning: [Semantic 
 - Optimized extension icon for better compatibility
 - Improved CI/CD workflows with integrated version bump and release process
 
-## [0.1.0] - 2025-10-26
+## [1.0.0] - 2025-10-31
 
 ### Added
 - Cross-file unused method detection

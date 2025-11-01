@@ -1,30 +1,66 @@
 name: Release
 
+# This workflow handles version bumping and marketplace publishing in two stages:
+#
+# Stage 1: Build & Package
+#   - Validates changelog input (required when version != none)
+#   - Bumps version and updates CHANGELOG.md
+#   - Builds and packages the extension
+#   - Uploads artifact for manual review
+#
+# Stage 2: Publish (requires manual approval via environment protection)
+#   - Downloads the packaged extension
+#   - Publishes to VS Code Marketplace
+#   - Creates GitHub release with changelog
+#
+# Usage:
+# 1. Manual release with version bump: Provide version type + changelog content
+# 2. Package only (testing): Set version to "none"
+# 3. Auto-publish from GitHub release: Triggered when release is published
+
 on:
   release:
     types: [published]
   workflow_dispatch:
     inputs:
-      stable_release:
-        description: 'Publish as stable release (uncheck for pre-release)'
+      version:
+        description: 'Version bump type'
         required: false
-        type: boolean
-        default: false
+        type: choice
+        options:
+          - none
+          - patch
+          - minor-prerelease
+          - minor-stable
+          - major
+        default: none
       skip_marketplace:
         description: 'Skip marketplace publish (package only)'
         required: false
         type: boolean
         default: false
+      changelog:
+        description: 'Changelog content (required when version != none). Use markdown format.'
+        required: false
+        type: string
 
 jobs:
-  publish:
+  build-and-package:
+    name: Build & Package
     runs-on: ubuntu-latest
-    environment: 
-      name: marketplace-release
-      url: https://marketplace.visualstudio.com/items?itemName=utsavtulsyan.dart-unused-code
+    permissions:
+      contents: write
+    outputs:
+      version: ${{ steps.release_flags.outputs.version }}
+      release_type: ${{ steps.release_flags.outputs.release_type }}
+      release_flags: ${{ steps.release_flags.outputs.flags }}
+      vsix_path: ${{ steps.package.outputs.vsix_path }}
     
     steps:
     - uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        fetch-depth: 0
     
     - name: Setup Node.js
       uses: actions/setup-node@v4
@@ -37,8 +73,121 @@ jobs:
       with:
         sdk: stable
     
+    - name: Configure Git
+      if: github.event_name == 'workflow_dispatch' && inputs.version != 'none'
+      run: |
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+    
     - name: Install dependencies
       run: npm ci
+    
+    - name: Determine version bump
+      if: github.event_name == 'workflow_dispatch' && inputs.version != 'none'
+      id: bump_type
+      run: |
+        CURRENT_VERSION=$(node -p "require('./package.json').version")
+        echo "current=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+        
+        case "${{ inputs.version }}" in
+          "patch")
+            echo "type=patch" >> $GITHUB_OUTPUT
+            echo "prerelease=false" >> $GITHUB_OUTPUT
+            ;;
+          "minor-prerelease")
+            MAJOR=$(echo $CURRENT_VERSION | cut -d. -f1)
+            MINOR=$(echo $CURRENT_VERSION | cut -d. -f2)
+            NEXT_MINOR=$((MINOR + 1))
+            if [ $((NEXT_MINOR % 2)) -eq 0 ]; then
+              NEXT_MINOR=$((NEXT_MINOR + 1))
+            fi
+            NEW_VERSION="$MAJOR.$NEXT_MINOR.0"
+            echo "type=custom" >> $GITHUB_OUTPUT
+            echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+            echo "prerelease=true" >> $GITHUB_OUTPUT
+            ;;
+          "minor-stable")
+            MAJOR=$(echo $CURRENT_VERSION | cut -d. -f1)
+            MINOR=$(echo $CURRENT_VERSION | cut -d. -f2)
+            NEXT_MINOR=$((MINOR + 1))
+            if [ $((NEXT_MINOR % 2)) -eq 1 ]; then
+              NEXT_MINOR=$((NEXT_MINOR + 1))
+            fi
+            NEW_VERSION="$MAJOR.$NEXT_MINOR.0"
+            echo "type=custom" >> $GITHUB_OUTPUT
+            echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+            echo "prerelease=false" >> $GITHUB_OUTPUT
+            ;;
+          "major")
+            echo "type=major" >> $GITHUB_OUTPUT
+            echo "prerelease=false" >> $GITHUB_OUTPUT
+            ;;
+        esac
+    
+    - name: Bump version
+      if: github.event_name == 'workflow_dispatch' && inputs.version != 'none'
+      run: |
+        if [ "${{ steps.bump_type.outputs.type }}" = "custom" ]; then
+          npm version ${{ steps.bump_type.outputs.new_version }} --no-git-tag-version
+          git add package.json
+          git commit -m "chore: bump version to ${{ steps.bump_type.outputs.new_version }}"
+          git tag "v${{ steps.bump_type.outputs.new_version }}"
+        else
+          npm version ${{ steps.bump_type.outputs.type }} -m "chore: bump version to %s"
+        fi
+    
+    - name: Validate version scheme
+      if: github.event_name == 'workflow_dispatch' && inputs.version != 'none'
+      run: |
+        VERSION=$(node -p "require('./package.json').version")
+        MINOR=$(echo $VERSION | cut -d. -f2)
+        IS_ODD=$((MINOR % 2))
+        
+        if [ "${{ steps.bump_type.outputs.prerelease }}" = "true" ] && [ $IS_ODD -eq 0 ]; then
+          echo "❌ ERROR: Pre-release versions must have ODD minor version"
+          exit 1
+        elif [ "${{ steps.bump_type.outputs.prerelease }}" = "false" ] && [ $IS_ODD -eq 1 ]; then
+          echo "❌ ERROR: Stable versions must have EVEN minor version"
+          exit 1
+        fi
+        
+        if [ "${{ steps.bump_type.outputs.prerelease }}" = "true" ]; then
+          echo "✅ Valid pre-release version: $VERSION (odd minor)"
+        else
+          echo "✅ Valid stable version: $VERSION (even minor)"
+        fi
+    
+    - name: Validate changelog input
+      if: github.event_name == 'workflow_dispatch' && inputs.version != 'none'
+      run: |
+        if [ -z "${{ inputs.changelog }}" ]; then
+          echo "❌ ERROR: Changelog content is required when bumping version"
+          echo "Please provide changelog content in the workflow input"
+          exit 1
+        fi
+        echo "✅ Changelog content provided"
+    
+    - name: Update CHANGELOG
+      if: github.event_name == 'workflow_dispatch' && inputs.version != 'none'
+      run: |
+        VERSION=$(node -p "require('./package.json').version")
+        DATE=$(date +%Y-%m-%d)
+        
+        # Create the new changelog entry
+        CHANGELOG_CONTENT="${{ inputs.changelog }}"
+        
+        # Escape special characters for sed
+        CHANGELOG_ESCAPED=$(echo "$CHANGELOG_CONTENT" | sed 's/[&/\]/\\&/g')
+        
+        # Insert new version section with provided changelog
+        sed -i "s/## \[Unreleased\]/## [Unreleased]\n\n## [$VERSION] - $DATE\n$CHANGELOG_ESCAPED/" CHANGELOG.md
+        
+        git add CHANGELOG.md
+        git commit -m "docs: update CHANGELOG for v$VERSION" || true
+    
+    - name: Push changes
+      if: github.event_name == 'workflow_dispatch' && inputs.version != 'none'
+      run: git push --follow-tags origin ${{ github.ref_name }}
     
     - name: Run linter
       run: npm run lint
@@ -75,17 +224,6 @@ jobs:
           echo "release_type=stable" >> $GITHUB_OUTPUT
           echo "track=Stable (even minor)" >> $GITHUB_OUTPUT
         fi
-        
-        # Manual override for testing
-        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-          if [ "${{ inputs.stable_release }}" = "true" ] && [ $IS_ODD -eq 0 ]; then
-            echo "Manual stable release for even version $VERSION"
-          elif [ "${{ inputs.stable_release }}" = "false" ] && [ $IS_ODD -eq 1 ]; then
-            echo "Manual pre-release for odd version $VERSION"
-          elif [ "${{ inputs.stable_release }}" = "true" ] && [ $IS_ODD -eq 1 ]; then
-            echo "⚠️  WARNING: Forcing stable release for odd version $VERSION - This violates version scheme!"
-          fi
-        fi
     
     - name: Package extension
       run: vsce package ${{ steps.release_flags.outputs.flags }}
@@ -94,45 +232,99 @@ jobs:
       id: package
       run: echo "vsix_path=$(ls *.vsix)" >> $GITHUB_OUTPUT
     
+    - name: Upload packaged extension
+      uses: actions/upload-artifact@v4
+      with:
+        name: vsix-package
+        path: '*.vsix'
+        retention-days: 5
+    
+    - name: Build Summary
+      run: |
+        VERSION=${{ steps.release_flags.outputs.version }}
+        MINOR=${{ steps.release_flags.outputs.minor }}
+        
+        echo "### Build Complete ✅" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "- **Version:** $VERSION" >> $GITHUB_STEP_SUMMARY
+        echo "- **Track:** ${{ steps.release_flags.outputs.track }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Package:** ${{ steps.package.outputs.vsix_path }}" >> $GITHUB_STEP_SUMMARY
+        
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          if [ "${{ inputs.version }}" != "none" ]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### Next Step: Publish 🚀" >> $GITHUB_STEP_SUMMARY
+            echo "The publish job is waiting for approval." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### Package Only Mode" >> $GITHUB_STEP_SUMMARY
+            echo "Skipping publish (version set to 'none')." >> $GITHUB_STEP_SUMMARY
+          fi
+        fi
+  
+  publish:
+    name: Publish to Marketplace
+    needs: build-and-package
+    if: |
+      (github.event_name == 'release') ||
+      (github.event_name == 'workflow_dispatch' && inputs.skip_marketplace != true && inputs.version != 'none')
+    runs-on: ubuntu-latest
+    environment:
+      name: marketplace-release
+      url: https://marketplace.visualstudio.com/items?itemName=utsavtulsyan.dart-unused-code
+    
+    steps:
+    - name: Download packaged extension
+      uses: actions/download-artifact@v4
+      with:
+        name: vsix-package
+    
+    - name: Install vsce
+      run: npm install -g @vscode/vsce
+    
     - name: Publish to VS Code Marketplace
-      if: ${{ github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && inputs.skip_marketplace != 'true') }}
-      run: vsce publish -p ${{ secrets.VSCE_PAT }} ${{ steps.release_flags.outputs.flags }}
+      run: vsce publish -p ${{ secrets.VSCE_PAT }} --packagePath *.vsix
       env:
         VSCE_PAT: ${{ secrets.VSCE_PAT }}
     
-    - name: Upload release artifact (for GitHub releases)
+    - name: Create GitHub Release (for version bumps)
+      if: github.event_name == 'workflow_dispatch' && inputs.version != 'none'
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: v${{ needs.build-and-package.outputs.version }}
+        name: v${{ needs.build-and-package.outputs.version }}
+        body: |
+          ${{ inputs.changelog }}
+        draft: false
+        prerelease: ${{ needs.build-and-package.outputs.release_type == 'pre-release' }}
+        files: '*.vsix'
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Upload release artifact (for existing GitHub releases)
       if: github.event_name == 'release'
       uses: actions/upload-release-asset@v1
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
         upload_url: ${{ github.event.release.upload_url }}
-        asset_path: ${{ steps.package.outputs.vsix_path }}
+        asset_path: ${{ needs.build-and-package.outputs.vsix_path }}
         asset_name: dart-unused-code-${{ github.event.release.tag_name }}.vsix
         asset_content_type: application/octet-stream
     
-    - name: Upload artifact (for manual runs)
-      if: github.event_name == 'workflow_dispatch'
-      uses: actions/upload-artifact@v4
-      with:
-        name: dart-unused-code-vsix${{ steps.release_flags.outputs.tag_suffix }}
-        path: '*.vsix'
-    
-    - name: Job Summary
-      if: always()
+    - name: Publish Summary
       run: |
-        VERSION=${{ steps.release_flags.outputs.version }}
-        MINOR=${{ steps.release_flags.outputs.minor }}
+        VERSION=${{ needs.build-and-package.outputs.version }}
         
-        echo "### Extension Release Summary 📦" >> $GITHUB_STEP_SUMMARY
+        echo "### Extension Published Successfully! �" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "- **Version:** $VERSION" >> $GITHUB_STEP_SUMMARY
-        echo "- **Track:** ${{ steps.release_flags.outputs.track }}" >> $GITHUB_STEP_SUMMARY
-        echo "- **Release Type:** ${{ steps.release_flags.outputs.release_type }}" >> $GITHUB_STEP_SUMMARY
-        echo "- **VSIX File:** ${{ steps.package.outputs.vsix_path }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Release Type:** ${{ needs.build-and-package.outputs.release_type }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Marketplace:** [View Extension](https://marketplace.visualstudio.com/items?itemName=utsavtulsyan.dart-unused-code)" >> $GITHUB_STEP_SUMMARY
         
-        if [ "${{ github.event_name }}" = "release" ]; then
-          echo "- **Marketplace:** [View Extension](https://marketplace.visualstudio.com/items?itemName=utsavtulsyan.dart-unused-code)" >> $GITHUB_STEP_SUMMARY
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          echo "- **GitHub Release:** [v$VERSION](https://github.com/${{ github.repository }}/releases/tag/v$VERSION)" >> $GITHUB_STEP_SUMMARY
+        elif [ "${{ github.event_name }}" = "release" ]; then
           echo "- **GitHub Release:** [v${{ github.event.release.tag_name }}](https://github.com/${{ github.repository }}/releases/tag/${{ github.event.release.tag_name }})" >> $GITHUB_STEP_SUMMARY
         fi
         
@@ -144,7 +336,7 @@ jobs:
         echo "| 1.0.x, 1.2.x (even) | Stable | Automatic |" >> $GITHUB_STEP_SUMMARY
         echo "| 1.1.x, 1.3.x (odd) | Pre-release | Opt-in required |" >> $GITHUB_STEP_SUMMARY
         
-        if [ $((MINOR % 2)) -eq 1 ]; then
+        if [ "${{ needs.build-and-package.outputs.release_type }}" = "pre-release" ]; then
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "> ⚠️ **Pre-release:** Users must explicitly enable pre-releases in VS Code to receive this update." >> $GITHUB_STEP_SUMMARY
         else

@@ -84,7 +84,7 @@ jobs:
       run: vsce package ${{ steps.release_flags.outputs.flags }}
     
     - name: Publish to VS Code Marketplace
-      if: ${{ github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && !inputs.skip_marketplace) }}
+      if: ${{ github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && inputs.skip_marketplace != 'true') }}
       run: vsce publish -p ${{ secrets.VSCE_PAT }} ${{ steps.release_flags.outputs.flags }}
       env:
         VSCE_PAT: ${{ secrets.VSCE_PAT }}

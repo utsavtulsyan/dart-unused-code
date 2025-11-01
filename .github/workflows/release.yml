@@ -37,7 +37,6 @@ on:
       changelog:
         description: 'Changelog content (required when version != none). Use markdown format.'
         required: false
-        type: string
 
 jobs:
   build-and-package:

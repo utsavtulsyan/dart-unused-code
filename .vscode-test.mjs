@@ -10,7 +10,7 @@ export default defineConfig({
 			extensionTestsEnv: { 
 				DART_CODE_EXTENSION: 'true'
 			},
-			installExtensions: ['dart-code.dart-code'],
+			// No extension needed for unit tests - they use mocks
 			launchArgs: [
 				'--skip-welcome',
 				'--skip-release-notes',
@@ -31,6 +31,7 @@ export default defineConfig({
 				DART_CODE_EXTENSION: 'true'
 			},
 			installExtensions: ['dart-code.dart-code'],
+			extensionInstallArgs: ['--force'],
 			launchArgs: [
 				'--skip-welcome',
 				'--skip-release-notes',

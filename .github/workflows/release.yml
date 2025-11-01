@@ -1,0 +1,107 @@
+name: Release
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      stable_release:
+        description: 'Publish as stable release (uncheck for pre-release)'
+        required: false
+        type: boolean
+        default: false
+      skip_marketplace:
+        description: 'Skip marketplace publish (package only)'
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: 
+      name: marketplace-release
+      url: https://marketplace.visualstudio.com/items?itemName=utsavtulsyan.dart-unused-code
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20.x'
+        cache: 'npm'
+    
+    - name: Setup Dart SDK
+      uses: dart-lang/setup-dart@v1
+      with:
+        sdk: stable
+    
+    - name: Install dependencies
+      run: npm ci
+    
+    - name: Run linter
+      run: npm run lint
+    
+    - name: Type check
+      run: npm run check-types
+    
+    - name: Build
+      run: npm run compile
+    
+    - name: Install vsce
+      run: npm install -g @vscode/vsce
+    
+    - name: Determine release flags
+      id: release_flags
+      run: |
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          # For manual runs: default to pre-release unless stable_release is checked
+          if [ "${{ inputs.stable_release }}" = "true" ]; then
+            echo "flags=" >> $GITHUB_OUTPUT
+            echo "tag_suffix=" >> $GITHUB_OUTPUT
+            echo "release_type=stable" >> $GITHUB_OUTPUT
+          else
+            echo "flags=--pre-release" >> $GITHUB_OUTPUT
+            echo "tag_suffix=-pre" >> $GITHUB_OUTPUT
+            echo "release_type=pre-release" >> $GITHUB_OUTPUT
+          fi
+        else
+          # Check if GitHub release is a pre-release
+          if [ "${{ github.event.release.prerelease }}" = "true" ]; then
+            echo "flags=--pre-release" >> $GITHUB_OUTPUT
+            echo "tag_suffix=-pre" >> $GITHUB_OUTPUT
+            echo "release_type=pre-release" >> $GITHUB_OUTPUT
+          else
+            echo "flags=" >> $GITHUB_OUTPUT
+            echo "tag_suffix=" >> $GITHUB_OUTPUT
+            echo "release_type=stable" >> $GITHUB_OUTPUT
+          fi
+        fi
+    
+    - name: Package extension
+      run: vsce package ${{ steps.release_flags.outputs.flags }}
+    
+    - name: Publish to VS Code Marketplace
+      if: ${{ !inputs.skip_marketplace || github.event_name == 'release' }}
+      run: vsce publish -p ${{ secrets.VSCE_PAT }} ${{ steps.release_flags.outputs.flags }}
+      env:
+        VSCE_PAT: ${{ secrets.VSCE_PAT }}
+    
+    - name: Upload release artifact (for GitHub releases)
+      if: github.event_name == 'release'
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ github.event.release.upload_url }}
+        asset_path: ./*.vsix
+        asset_name: dart-unused-code-${{ github.event.release.tag_name }}.vsix
+        asset_content_type: application/octet-stream
+    
+    - name: Upload artifact (for manual runs)
+      if: github.event_name == 'workflow_dispatch'
+      uses: actions/upload-artifact@v4
+      with:
+        name: dart-unused-code-vsix${{ steps.release_flags.outputs.tag_suffix }}
+        path: '*.vsix'

@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import * as path from 'path';
 import { CacheService } from '../services/cacheService';
 import { Diagnostics, Workspace } from '../infra';
 import { DependencyTrackerService } from '../services/dependencyTrackerService';
@@ -169,7 +170,9 @@ export class FileCreationHandler {
                                     continue;
                                 }
                                 
-                                if (defPath.includes('.pub-cache') || defPath.includes('/.dart_tool/')) {
+                                // Normalize path separators for consistent checks across platforms
+                                const normalizedDefPath = defPath.split(path.sep).join('/');
+                                if (normalizedDefPath.includes('.pub-cache') || normalizedDefPath.includes('/.dart_tool/')) {
                                     continue;
                                 }
 

@@ -1,0 +1,173 @@
+{
+  "name": "dart-unused-code",
+  "displayName": "Dart Unused Code",
+  "description": "Unused code detection for Dart - finds unused methods and classes with cross-file analysis",
+  "version": "0.1.0",
+  "publisher": "utsavtulsyan",
+  "icon": "icon.png",
+  "galleryBanner": {
+    "color": "#1E2A35",
+    "theme": "dark"
+  },
+  "author": {
+    "name": "Utsav Tulsyan"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/utsavtulsyan/dart-unused-code"
+  },
+  "bugs": {
+    "url": "https://github.com/utsavtulsyan/dart-unused-code/issues"
+  },
+  "homepage": "https://github.com/utsavtulsyan/dart-unused-code#readme",
+  "keywords": [
+    "dart",
+    "unused code",
+    "dead code",
+    "unused methods",
+    "unused classes",
+    "linter",
+    "analysis",
+    "code quality",
+    "refactoring",
+    "flutter",
+    "cleanup"
+  ],
+  "files": [
+    "dist/*.js",
+    "icon.png",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE",
+    "SECURITY.md"
+  ],
+  "engines": {
+    "vscode": "^1.105.0"
+  },
+  "categories": [
+    "Linters",
+    "Programming Languages"
+  ],
+  "activationEvents": [
+    "onLanguage:dart"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "dartUnusedCode.analyzeWorkspace",
+        "title": "Dart: Analyze Unused Code"
+      },
+      {
+        "command": "dartUnusedCode.clearDiagnostics",
+        "title": "Dart: Clear Unused Code Warnings"
+      },
+      {
+        "command": "dartUnusedCode.toggleStatusBarDetail",
+        "title": "Dart: Toggle Status Bar Detail"
+      }
+    ],
+    "configuration": {
+      "title": "Dart Unused Code",
+      "properties": {
+        "dartUnusedCode.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable/disable unused code detection"
+        },
+        "dartUnusedCode.sourceDirectory": {
+          "type": "string",
+          "default": "lib",
+          "description": "Source directory to analyze for unused code (relative to workspace root)"
+        },
+        "dartUnusedCode.excludePatterns": {
+          "type": "array",
+          "default": [
+            "**/*.g.dart",
+            "**/*.freezed.dart",
+            "**/*.gr.dart",
+            "**/*.config.dart",
+            "**/*.mocks.dart",
+            "**/test/**",
+            "**/tests/**",
+            "**/*_test.dart",
+            "**/*_tests.dart",
+            "**/generated/**",
+            "**/.dart_tool/**",
+            "**/build/**"
+          ],
+          "description": "File patterns to exclude from analysis"
+        },
+        "dartUnusedCode.severity": {
+          "type": "string",
+          "enum": ["Error", "Warning", "Information", "Hint"],
+          "default": "Warning",
+          "description": "Severity level for unused code diagnostics"
+        },
+        "dartUnusedCode.maxConcurrency": {
+          "type": "number",
+          "default": 5,
+          "minimum": 1,
+          "maximum": 20,
+          "description": "Maximum number of files to process concurrently"
+        },
+        "dartUnusedCode.logLevel": {
+          "type": "string",
+          "enum": ["TRACE", "DEBUG", "INFO", "WARN", "ERROR", "NONE"],
+          "default": "INFO",
+          "enumDescriptions": [
+            "Most verbose - detailed execution traces",
+            "Detailed diagnostic information for debugging",
+            "General informational messages about operations",
+            "Warning messages for potentially problematic situations",
+            "Error messages only",
+            "Disable all logging"
+          ],
+          "description": "Set the logging level for the extension output"
+        },
+        "dartUnusedCode.analyzeOnSave": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically analyze files when saved"
+        },
+        "dartUnusedCode.analysisDelay": {
+          "type": "number",
+          "default": 2000,
+          "minimum": 0,
+          "maximum": 900000,
+          "description": "Delay in milliseconds before starting initial analysis (allows Dart Analysis Server to complete indexing)"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run package",
+    "compile": "npm run check-types && npm run lint && node esbuild.js",
+    "watch": "npm-run-all -p watch:*",
+    "watch:esbuild": "node esbuild.js --watch",
+    "watch:tsc": "tsc --noEmit --watch --project tsconfig.json",
+    "package": "npm run check-types && npm run lint && node esbuild.js --production",
+    "compile-tests": "tsc -p . --outDir out",
+    "watch-tests": "tsc -p . -w --outDir out",
+    "pretest": "npm run compile-tests && npm run compile && npm run lint",
+    "check-types": "tsc --noEmit",
+    "lint": "eslint src",
+    "test": "vscode-test",
+    "test:unit": "vscode-test --label unitTests",
+    "test:integration": "vscode-test --label integrationTests"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.105.0",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "22.x",
+    "@typescript-eslint/eslint-plugin": "^8.45.0",
+    "@typescript-eslint/parser": "^8.45.0",
+    "eslint": "^9.36.0",
+    "esbuild": "^0.25.10",
+    "npm-run-all": "^4.1.5",
+    "typescript": "^5.9.3",
+    "@vscode/test-cli": "^0.0.11",
+    "@vscode/test-electron": "^2.5.2"
+  }
+}

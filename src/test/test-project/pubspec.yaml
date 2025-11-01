@@ -1,0 +1,6 @@
+name: test_project
+description: Test project for unused methods extension
+version: 1.0.0
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'

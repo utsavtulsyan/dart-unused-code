@@ -1,0 +1,34 @@
+# Source files
+src/
+out/
+coverage/
+tmp/
+
+# Tests
+**/*.test.ts
+**/*.test.js
+test-analyzer.js
+test-expectations.sh
+
+# Development configs
+.vscode/
+.vscode-test.mjs
+tsconfig.json
+eslint.config.mjs
+esbuild.js
+
+# Git
+.git/
+.github/
+.gitignore
+.gitattributes
+
+# Misc
+.DS_Store
+*.log
+*.vsix
+vsc-extension-quickstart.md
+ARCHITECTURE.md
+
+# VS Code Test Runtime (IMPORTANT: Must be after node_modules/)
+.vscode-test/**

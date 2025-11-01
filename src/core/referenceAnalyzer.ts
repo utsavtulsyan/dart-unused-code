@@ -116,10 +116,12 @@ export class ReferenceAnalyzer {
     ): vscode.Location[] {
         return references.filter(location => {
             const relativePath = path.relative(workspacePath, location.uri.fsPath);
-            const matchedPattern = this.getMatchedPattern(relativePath, excludePatterns);
+            // Convert to forward slashes for consistent glob matching across platforms
+            const normalizedPath = relativePath.split(path.sep).join('/');
+            const matchedPattern = this.getMatchedPattern(normalizedPath, excludePatterns);
             
             if (matchedPattern) {
-                this.logger.trace(`  [EXCLUDED] ${methodName} -> ${relativePath} (matched pattern: "${matchedPattern}")`);
+                this.logger.trace(`  [EXCLUDED] ${methodName} -> ${normalizedPath} (matched pattern: "${matchedPattern}")`);
                 return false;
             }
             

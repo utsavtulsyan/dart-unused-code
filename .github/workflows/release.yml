@@ -34,11 +34,6 @@ on:
           - minor-stable
           - major
         default: none
-      skip_marketplace:
-        description: 'Skip marketplace publish (package only)'
-        required: false
-        type: boolean
-        default: false
       changelog:
         description: 'Changelog content (required when version != none). Use markdown format.'
         required: false
@@ -267,7 +262,7 @@ jobs:
     needs: build-and-package
     if: |
       (github.event_name == 'release') ||
-      (github.event_name == 'workflow_dispatch' && inputs.skip_marketplace != true && inputs.version != 'none')
+      (github.event_name == 'workflow_dispatch' && inputs.version != 'none')
     runs-on: ubuntu-latest
     environment:
       name: marketplace-release

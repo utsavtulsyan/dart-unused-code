@@ -94,6 +94,7 @@
             "**/*.gr.dart",
             "**/*.config.dart",
             "**/*.mocks.dart",
+            "**/*.mapper.dart",
             "**/test/**",
             "**/tests/**",
             "**/*_test.dart",

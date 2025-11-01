@@ -52,7 +52,7 @@ Manual analysis: `Cmd+Shift+P` → `Dart: Analyze Unused Code`
 
 ### Default Exclusions
 
-- Generated files: `*.g.dart`, `*.freezed.dart`, `*.gr.dart`, `*.config.dart`, `*.mocks.dart`
+- Generated files: `*.g.dart`, `*.freezed.dart`, `*.gr.dart`, `*.config.dart`, `*.mocks.dart`, `*.mapper.dart`
 - Test files: `test/**`, `*_test.dart`, `tests/**`
 - Build artifacts: `.dart_tool/**`, `build/**`, `generated/**`
 

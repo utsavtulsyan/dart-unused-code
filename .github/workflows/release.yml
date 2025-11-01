@@ -19,10 +19,9 @@ on:
 jobs:
   publish:
     runs-on: ubuntu-latest
-    # Temporarily disable environment for testing
-    # environment: 
-    #   name: marketplace-release
-    #   url: https://marketplace.visualstudio.com/items?itemName=utsavtulsyan.dart-unused-code
+    environment: 
+      name: marketplace-release
+      url: https://marketplace.visualstudio.com/items?itemName=utsavtulsyan.dart-unused-code
     
     steps:
     - uses: actions/checkout@v4

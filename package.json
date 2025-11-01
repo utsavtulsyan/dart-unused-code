@@ -2,7 +2,7 @@
   "name": "dart-unused-code",
   "displayName": "Dart Unused Code",
   "description": "Unused code detection for Dart - finds unused methods and classes with cross-file analysis",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "publisher": "utsavtulsyan",
   "icon": "icon.png",
   "galleryBanner": {

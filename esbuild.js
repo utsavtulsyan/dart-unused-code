@@ -31,7 +31,7 @@ async function main() {
 		bundle: true,
 		format: 'cjs',
 		minify: production,
-		sourcemap: !production,
+		sourcemap: !production ? 'inline' : false,
 		sourcesContent: false,
 		platform: 'node',
 		outfile: 'dist/extension.js',
@@ -39,6 +39,8 @@ async function main() {
 		logLevel: 'silent',
 		treeShaking: true,
 		metafile: production,
+		legalComments: 'none',
+		keepNames: false,
 		plugins: [
 			/* add to the end of plugins array */
 			esbuildProblemMatcherPlugin,

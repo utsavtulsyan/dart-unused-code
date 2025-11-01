@@ -9,8 +9,14 @@
     "color": "#1E2A35",
     "theme": "dark"
   },
+  "pricing": "Free",
+  "sponsor": {
+    "url": "https://github.com/sponsors/utsavtulsyan"
+  },
   "author": {
-    "name": "Utsav Tulsyan"
+    "name": "Utsav Tulsyan",
+    "email": "support@utsavtulsyan.com",
+    "url": "https://utsavtulsyan.com"
   },
   "license": "MIT",
   "repository": {
@@ -23,27 +29,23 @@
   "homepage": "https://github.com/utsavtulsyan/dart-unused-code#readme",
   "keywords": [
     "dart",
+    "flutter",
     "unused code",
     "dead code",
     "unused methods",
-    "unused classes",
+    "code analysis",
+    "static analysis",
     "linter",
-    "analysis",
     "code quality",
     "refactoring",
-    "flutter",
-    "cleanup"
-  ],
-  "files": [
-    "dist/*.js",
-    "icon.png",
-    "README.md",
-    "CHANGELOG.md",
-    "LICENSE",
-    "SECURITY.md"
+    "cleanup",
+    "code smell",
+    "dart analyzer",
+    "optimization",
+    "maintenance"
   ],
   "engines": {
-    "vscode": "^1.105.0"
+    "vscode": "^1.90.0"
   },
   "extensionDependencies": [
     "dart-code.dart-code"
@@ -92,6 +94,7 @@
             "**/*.gr.dart",
             "**/*.config.dart",
             "**/*.mocks.dart",
+            "**/*.mapper.dart",
             "**/test/**",
             "**/tests/**",
             "**/*_test.dart",
@@ -161,7 +164,7 @@
     "test:integration": "vscode-test --label integrationTests"
   },
   "devDependencies": {
-    "@types/vscode": "^1.105.0",
+    "@types/vscode": "^1.90.0",
     "@types/mocha": "^10.0.10",
     "@types/node": "22.x",
     "@typescript-eslint/eslint-plugin": "^8.45.0",

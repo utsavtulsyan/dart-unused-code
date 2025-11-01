@@ -1,9 +1,13 @@
 import { defineConfig } from '@vscode/test-cli';
 
+// Use environment variable or default to minimum supported version
+const vscodeVersion = process.env.VSCODE_TEST_VERSION || '1.90.0';
+
 export default defineConfig({
 	tests: [
 		{
 			label: 'unitTests',
+			version: vscodeVersion,
 			files: 'out/test/unit/**/*.test.js',
 			workspaceFolder: './src/test/test-project',
 			extensionDevelopmentPath: '.',
@@ -24,6 +28,7 @@ export default defineConfig({
 		},
 		{
 			label: 'integrationTests',
+			version: vscodeVersion,
 			files: 'out/test/integration/**/*.test.js',
 			workspaceFolder: './src/test/test-project',
 			extensionDevelopmentPath: '.',

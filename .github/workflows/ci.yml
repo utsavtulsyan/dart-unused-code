@@ -7,12 +7,14 @@ on:
     branches: [ main, develop ]
 
 jobs:
-  build:
+  test:
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        node-version: [18.x, 20.x]
+        node-version: [20.x]
+        vscode-version: ['1.90.0', 'stable']
 
     steps:
     - uses: actions/checkout@v4
@@ -40,37 +42,47 @@ jobs:
     - name: Build
       run: npm run compile
     
-    - name: Setup Xvfb (Linux)
-      if: runner.os == 'Linux'
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y xvfb libxkbfile-dev pkg-config libsecret-1-dev libxss1 dbus xauth libgtk-3-0 libgbm1
-        sudo /usr/bin/Xvfb :99 -screen 0 1024x768x24 > /dev/null 2>&1 &
-    
     - name: Verify Dart SDK
       run: dart --version
     
-    - name: Pre-download VS Code Dart extension
-      run: |
-        mkdir -p ~/.vscode-test/extensions
-        echo "VS Code test runner will install Dart extension automatically"
+    - name: Run tests (Linux) - VS Code ${{ matrix.vscode-version }}
+      if: runner.os == 'Linux'
+      run: xvfb-run -a npm test
+      env:
+        VSCODE_TEST_VERSION: ${{ matrix.vscode-version }}
     
-    - name: Run tests
+    - name: Run tests (Windows/macOS) - VS Code ${{ matrix.vscode-version }}
+      if: runner.os != 'Linux'
       run: npm test
       env:
-        DISPLAY: ':99.0'
+        VSCODE_TEST_VERSION: ${{ matrix.vscode-version }}
     
-    - name: Install vsce
-      run: npm install -g @vscode/vsce
-      if: matrix.os == 'ubuntu-latest' && matrix.node-version == '20.x'
+  
+  package:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20.x'
+        cache: 'npm'
+    
+    - name: Install dependencies
+      run: npm ci
     
     - name: Package extension
-      run: vsce package
-      if: matrix.os == 'ubuntu-latest' && matrix.node-version == '20.x'
+      run: |
+        npm install -g @vscode/vsce
+        vsce package
     
     - name: Upload artifact
       uses: actions/upload-artifact@v4
-      if: matrix.os == 'ubuntu-latest' && matrix.node-version == '20.x'
       with:
-        name: dart-unused-code-vsix
+        name: dart-unused-code-vsix-${{ github.sha }}
         path: '*.vsix'
+        retention-days: 7

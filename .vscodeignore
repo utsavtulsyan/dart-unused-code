@@ -1,0 +1,64 @@
+# Source files (compiled to dist/)
+src/**
+*.ts
+tsconfig.json
+eslint.config.mjs
+esbuild.js
+
+# Tests
+out/test/**
+src/test/**
+.vscode-test/**
+*.test.ts
+
+# Development files
+.vscode/**
+.vscode-test/**
+.gitignore
+.prettierrc
+.eslintrc*
+**/.eslintrc.json
+.yarnrc
+
+# Build artifacts
+node_modules/**
+out/**
+*.vsix
+dist/*.map
+dist/meta.json
+
+# Documentation (keep these - they're needed for Marketplace)
+!README.md
+!CHANGELOG.md
+!LICENSE
+!SECURITY.md
+!CONTRIBUTING.md
+!SUPPORT.md
+
+# CI/CD
+.github/**
+.travis.yml
+.gitlab-ci.yml
+azure-pipelines.yml
+
+# Git
+.git/**
+.gitattributes
+
+# NPM/Package manager
+.npmignore
+.npmrc
+.yarnrc
+package-lock.json
+yarn.lock
+
+# VS Code
+.vscode-test.mjs
+
+# Misc
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.DS_Store
+Thumbs.db

@@ -93,8 +93,14 @@ Solutions:
 - May not detect reflection, `dynamic` calls, or `noSuchMethod` usage
 - Requires Dart Analysis Server readiness
 
-## Issues & Contributions
+## Support & Contributing
 
+- [Support & Help](SUPPORT.md) - Get help and troubleshooting
 - [Report bugs](https://github.com/utsavtulsyan/dart-unused-code/issues/new?template=bug_report.md)
 - [Request features](https://github.com/utsavtulsyan/dart-unused-code/issues/new?template=feature_request.md)
-- [Contributing guidelines](https://github.com/utsavtulsyan/dart-unused-code/blob/main/CONTRIBUTING.md)
+- [Contributing guidelines](CONTRIBUTING.md)
+- [Security policy](SECURITY.md)
+
+## License
+
+MIT License - see [LICENSE](LICENSE) for details

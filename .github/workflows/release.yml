@@ -55,27 +55,35 @@ jobs:
     - name: Determine release flags
       id: release_flags
       run: |
-        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-          # For manual runs: default to pre-release unless stable_release is checked
-          if [ "${{ inputs.stable_release }}" = "true" ]; then
-            echo "flags=" >> $GITHUB_OUTPUT
-            echo "tag_suffix=" >> $GITHUB_OUTPUT
-            echo "release_type=stable" >> $GITHUB_OUTPUT
-          else
-            echo "flags=--pre-release" >> $GITHUB_OUTPUT
-            echo "tag_suffix=-pre" >> $GITHUB_OUTPUT
-            echo "release_type=pre-release" >> $GITHUB_OUTPUT
-          fi
+        # Get version from package.json
+        VERSION=$(node -p "require('./package.json').version")
+        MINOR=$(echo $VERSION | cut -d. -f2)
+        IS_ODD=$((MINOR % 2))
+        
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+        echo "minor=$MINOR" >> $GITHUB_OUTPUT
+        
+        # Odd minor = pre-release, Even minor = stable
+        if [ $IS_ODD -eq 1 ]; then
+          echo "flags=--pre-release" >> $GITHUB_OUTPUT
+          echo "tag_suffix=-pre" >> $GITHUB_OUTPUT
+          echo "release_type=pre-release" >> $GITHUB_OUTPUT
+          echo "track=Pre-release (odd minor)" >> $GITHUB_OUTPUT
         else
-          # Check if GitHub release is a pre-release
-          if [ "${{ github.event.release.prerelease }}" = "true" ]; then
-            echo "flags=--pre-release" >> $GITHUB_OUTPUT
-            echo "tag_suffix=-pre" >> $GITHUB_OUTPUT
-            echo "release_type=pre-release" >> $GITHUB_OUTPUT
-          else
-            echo "flags=" >> $GITHUB_OUTPUT
-            echo "tag_suffix=" >> $GITHUB_OUTPUT
-            echo "release_type=stable" >> $GITHUB_OUTPUT
+          echo "flags=" >> $GITHUB_OUTPUT
+          echo "tag_suffix=" >> $GITHUB_OUTPUT
+          echo "release_type=stable" >> $GITHUB_OUTPUT
+          echo "track=Stable (even minor)" >> $GITHUB_OUTPUT
+        fi
+        
+        # Manual override for testing
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          if [ "${{ inputs.stable_release }}" = "true" ] && [ $IS_ODD -eq 0 ]; then
+            echo "Manual stable release for even version $VERSION"
+          elif [ "${{ inputs.stable_release }}" = "false" ] && [ $IS_ODD -eq 1 ]; then
+            echo "Manual pre-release for odd version $VERSION"
+          elif [ "${{ inputs.stable_release }}" = "true" ] && [ $IS_ODD -eq 1 ]; then
+            echo "⚠️  WARNING: Forcing stable release for odd version $VERSION - This violates version scheme!"
           fi
         fi
     
@@ -109,3 +117,37 @@ jobs:
       with:
         name: dart-unused-code-vsix${{ steps.release_flags.outputs.tag_suffix }}
         path: '*.vsix'
+    
+    - name: Job Summary
+      if: always()
+      run: |
+        VERSION=${{ steps.release_flags.outputs.version }}
+        MINOR=${{ steps.release_flags.outputs.minor }}
+        
+        echo "### Extension Release Summary 📦" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "- **Version:** $VERSION" >> $GITHUB_STEP_SUMMARY
+        echo "- **Track:** ${{ steps.release_flags.outputs.track }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Release Type:** ${{ steps.release_flags.outputs.release_type }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **VSIX File:** ${{ steps.package.outputs.vsix_path }}" >> $GITHUB_STEP_SUMMARY
+        
+        if [ "${{ github.event_name }}" = "release" ]; then
+          echo "- **Marketplace:** [View Extension](https://marketplace.visualstudio.com/items?itemName=utsavtulsyan.dart-unused-code)" >> $GITHUB_STEP_SUMMARY
+          echo "- **GitHub Release:** [v${{ github.event.release.tag_name }}](https://github.com/${{ github.repository }}/releases/tag/${{ github.event.release.tag_name }})" >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### Version Scheme 📋" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "| Version Pattern | Track | User Updates |" >> $GITHUB_STEP_SUMMARY
+        echo "|----------------|-------|--------------|" >> $GITHUB_STEP_SUMMARY
+        echo "| 1.0.x, 1.2.x (even) | Stable | Automatic |" >> $GITHUB_STEP_SUMMARY
+        echo "| 1.1.x, 1.3.x (odd) | Pre-release | Opt-in required |" >> $GITHUB_STEP_SUMMARY
+        
+        if [ $((MINOR % 2)) -eq 1 ]; then
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "> ⚠️ **Pre-release:** Users must explicitly enable pre-releases in VS Code to receive this update." >> $GITHUB_STEP_SUMMARY
+        else
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "> ✅ **Stable release:** All users will receive this update automatically." >> $GITHUB_STEP_SUMMARY
+        fi

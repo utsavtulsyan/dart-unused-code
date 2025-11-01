@@ -10,7 +10,7 @@
 
 **DO NOT** create public issues.
 
-**Email:** utsavtulsyan44@gmail.com
+**Email:** support@utsavtulsyan.com
 
 Include: description, reproduction steps, impact, suggested fix (optional)
 

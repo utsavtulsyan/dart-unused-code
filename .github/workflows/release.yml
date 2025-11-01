@@ -83,6 +83,10 @@ jobs:
     - name: Package extension
       run: vsce package ${{ steps.release_flags.outputs.flags }}
     
+    - name: Get package filename
+      id: package
+      run: echo "vsix_path=$(ls *.vsix)" >> $GITHUB_OUTPUT
+    
     - name: Publish to VS Code Marketplace
       if: ${{ github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && inputs.skip_marketplace != 'true') }}
       run: vsce publish -p ${{ secrets.VSCE_PAT }} ${{ steps.release_flags.outputs.flags }}
@@ -96,7 +100,7 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
         upload_url: ${{ github.event.release.upload_url }}
-        asset_path: ./*.vsix
+        asset_path: ${{ steps.package.outputs.vsix_path }}
         asset_name: dart-unused-code-${{ github.event.release.tag_name }}.vsix
         asset_content_type: application/octet-stream
     

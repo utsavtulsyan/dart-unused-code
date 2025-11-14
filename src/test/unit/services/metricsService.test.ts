@@ -41,12 +41,20 @@ suite('MetricsService Unit Tests', () => {
 
     suite('Average Time Calculations', () => {
         test('should calculate average full analysis time', () => {
-            // Run multiple analyses
-            for (let i = 0; i < 3; i++) {
-                const metrics = metricsService.startAnalysis(false);
-                // Manually set duration since we can't wait for real time
-                metrics.startTime = Date.now() - (100 + i * 50);
-                metricsService.finishAnalysis(metrics);
+            const durations = [100, 150, 200];
+            const originalNow = Date.now;
+            let currentTime = 1_000;
+            Date.now = () => currentTime;
+
+            try {
+                for (const duration of durations) {
+                    const metrics = metricsService.startAnalysis(false);
+                    currentTime += duration;
+                    metricsService.finishAnalysis(metrics);
+                    currentTime += 5; // advance clock slightly between runs
+                }
+            } finally {
+                Date.now = originalNow;
             }
 
             const avgTime = metricsService.getAverageFullAnalysisTime();
@@ -54,11 +62,20 @@ suite('MetricsService Unit Tests', () => {
         });
 
         test('should calculate average incremental analysis time', () => {
-            // Run multiple incremental analyses
-            for (let i = 0; i < 3; i++) {
-                const metrics = metricsService.startAnalysis(true);
-                metrics.startTime = Date.now() - (10 + i * 5);
-                metricsService.finishAnalysis(metrics);
+            const durations = [10, 15, 20];
+            const originalNow = Date.now;
+            let currentTime = 2_000;
+            Date.now = () => currentTime;
+
+            try {
+                for (const duration of durations) {
+                    const metrics = metricsService.startAnalysis(true);
+                    currentTime += duration;
+                    metricsService.finishAnalysis(metrics);
+                    currentTime += 2;
+                }
+            } finally {
+                Date.now = originalNow;
             }
 
             const avgTime = metricsService.getAverageIncrementalAnalysisTime();

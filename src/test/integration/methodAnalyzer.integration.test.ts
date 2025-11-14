@@ -21,7 +21,7 @@ suite('MethodAnalyzer Integration Tests', () => {
     let testProjectPath: string;
     let testFile: string;
 
-    suiteSetup(function() {
+    suiteSetup(function () {
         const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
         if (!workspaceFolder) {
             throw new Error('No workspace folder found');
@@ -41,7 +41,7 @@ suite('MethodAnalyzer Integration Tests', () => {
         vscodeCommands = new VscodeCommands();
         diagnosticCollection = vscode.languages.createDiagnosticCollection('test-diagnostics');
         diagnostics = new Diagnostics(diagnosticCollection);
-        
+
         methodExtractor = new MethodExtractor(vscodeCommands, mockLogger);
         referenceAnalyzer = new ReferenceAnalyzer(vscodeCommands, mockLogger);
         methodAnalyzer = new MethodAnalyzer(
@@ -74,7 +74,7 @@ void main() {
 }
 `;
         fs.writeFileSync(testFile, testContent);
-        
+
         // Wait for file system to settle
         await new Promise(resolve => setTimeout(resolve, 100));
     });
@@ -86,27 +86,23 @@ void main() {
         }
     });
 
-    test('should extract methods from file', async function() {
-        this.timeout(10000);
-
+    test('should extract methods from file', async function () {
         const uri = vscode.Uri.file(testFile);
         await vscode.workspace.openTextDocument(uri);
 
         const methods = await methodExtractor.extractMethods(testFile);
-        
+
         // Should find public methods but not private ones
         assert.ok(methods.length >= 2, 'Should find at least 2 public methods');
         assert.ok(methods.some((m: MethodInfo) => m.name === 'usedMethod'), 'Should find usedMethod');
         assert.ok(methods.some((m: MethodInfo) => m.name === 'unusedMethod'), 'Should find unusedMethod');
-        
+
         // Private methods should be marked
         const privateMethods = methods.filter((m: MethodInfo) => m.isPrivate);
         assert.ok(privateMethods.every((m: MethodInfo) => m.name.startsWith('_')), 'Private methods should start with _');
     });
 
-    test('should analyze methods and detect unused ones', async function() {
-        this.timeout(10000);
-
+    test('should analyze methods and detect unused ones', async function () {
         const uri = vscode.Uri.file(testFile);
         await vscode.workspace.openTextDocument(uri);
 
@@ -137,9 +133,7 @@ void main() {
         );
     });
 
-    test('should clear diagnostics for file', async function() {
-        this.timeout(10000);
-
+    test('should clear diagnostics for file', async function () {
         const uri = vscode.Uri.file(testFile);
         await vscode.workspace.openTextDocument(uri);
 
@@ -162,9 +156,7 @@ void main() {
         assert.strictEqual(fileDiagnostics?.length || 0, 0, 'Diagnostics should be cleared');
     });
 
-    test('should handle files with no methods', async function() {
-        this.timeout(10000);
-
+    test('should handle files with no methods', async function () {
         const emptyFile = path.join(testProjectPath, 'empty_temp.dart');
         fs.writeFileSync(emptyFile, '// Empty file\n');
 
@@ -179,9 +171,7 @@ void main() {
         }
     });
 
-    test('should exclude test annotated methods', async function() {
-        this.timeout(10000);
-
+    test('should exclude test annotated methods', async function () {
         const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
         if (!workspaceFolder) {
             this.skip();
@@ -189,7 +179,7 @@ void main() {
         }
 
         const testMethodFile = path.join(workspaceFolder.uri.fsPath, 'lib', 'annotation_test.dart');
-        
+
         // Verify file exists
         if (!fs.existsSync(testMethodFile)) {
             console.log('annotation_test.dart not found in test project, skipping');
@@ -205,26 +195,24 @@ void main() {
         await new Promise(resolve => setTimeout(resolve, 300));
 
         const methods = await methodExtractor.extractMethods(testMethodFile);
-        
+
         // If no methods found, skip gracefully
         if (methods.length === 0) {
             console.log('No methods extracted - Dart Analysis Server may not have indexed the file yet');
             this.skip();
             return;
         }
-        
+
         // Deprecated annotated method should NOT be filtered (it's not @test or @override)
         const hasDeprecatedMethod = methods.some((m: MethodInfo) => m.name === 'annotatedDeprecatedMethod');
         assert.strictEqual(hasDeprecatedMethod, true, 'Deprecated methods should be included (not filtered)');
-        
+
         // Regular method should be included
         const hasNormalMethod = methods.some((m: MethodInfo) => m.name === 'regularNormalMethod');
         assert.strictEqual(hasNormalMethod, true, 'Regular methods should be included');
     });
 
-    test('should exclude override annotated methods', async function() {
-        this.timeout(10000);
-
+    test('should exclude override annotated methods', async function () {
         const overrideFile = path.join(testProjectPath, 'override_methods_temp.dart');
         const content = `
 class BaseClass {
@@ -248,11 +236,11 @@ class DerivedClass extends BaseClass {
         await vscode.workspace.openTextDocument(uri);
 
         const methods = await methodExtractor.extractMethods(overrideFile);
-        
+
         // Override method should be filtered out
         const overrideMethods = methods.filter((m: MethodInfo) => m.name === 'baseMethod' && m.className === 'DerivedClass');
         assert.strictEqual(overrideMethods.length, 0, 'Override methods should be excluded');
-        
+
         assert.ok(
             methods.some((m: MethodInfo) => m.name === 'newMethod'),
             'Non-override methods should be included'

@@ -8,24 +8,25 @@ import { Logger } from '../types';
  */
 export class FileSystemUtils {
     /**
-     * Finds all Dart files in the lib/ directory, respecting exclude patterns.
+     * Finds all Dart files within the configured source directory, respecting exclude patterns.
      */
     static findDartFiles(
-        rootPath: string, 
+        rootPath: string,
+        sourceDirectory: string,
         excludePatterns: string[],
         logger: Logger
     ): string[] {
-        const libPath = path.join(rootPath, 'lib');
-        
-        if (!fs.existsSync(libPath)) {
-            logger.warn('[FILE_DISCOVERY] lib/ directory not found');
+        const sourcePath = path.join(rootPath, sourceDirectory);
+
+        if (!fs.existsSync(sourcePath)) {
+            logger.warn(`[FILE_DISCOVERY] ${sourceDirectory}/ directory not found`);
             return [];
         }
 
         const files: string[] = [];
-        this.walkDirectory(libPath, rootPath, excludePatterns, files);
+        this.walkDirectory(sourcePath, rootPath, excludePatterns, files);
 
-        logger.info(`[FILE_DISCOVERY] Found ${files.length} Dart files`);
+        logger.info(`[FILE_DISCOVERY] Found ${files.length} Dart files in ${sourceDirectory}/`);
         return files;
     }
 

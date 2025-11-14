@@ -91,21 +91,72 @@ suite('AnalyzerOrchestrator Unit Tests', () => {
             assert.strictEqual(analyzeWorkspaceCalled, false, 'Should not call workspace analyzer when disabled');
         });
 
-        test('should prevent concurrent workspace analysis', async () => {
+        test('should queue workspace analysis requests and process sequentially', async () => {
             let analysisCount = 0;
+            let running = 0;
+            let maxConcurrent = 0;
+
             mockWorkspaceAnalyzer.analyze = async () => {
                 analysisCount++;
-                await new Promise(resolve => setTimeout(resolve, 100));
+                running++;
+                maxConcurrent = Math.max(maxConcurrent, running);
+                await new Promise(resolve => setTimeout(resolve, 50));
+                running--;
                 return 0;
             };
 
-            // Start two analyses concurrently
             const promise1 = orchestrator.analyzeWorkspace();
             const promise2 = orchestrator.analyzeWorkspace();
 
             await Promise.all([promise1, promise2]);
-            
-            assert.strictEqual(analysisCount, 1, 'Should only run one analysis at a time');
+
+            assert.strictEqual(maxConcurrent, 1, 'Should not run workspace analyses in parallel');
+            assert.strictEqual(analysisCount, 2, 'Should process each workspace analysis request');
+        });
+
+        test('should retry workspace analysis after failure', async () => {
+            let attempts = 0;
+            mockWorkspaceAnalyzer.analyze = async () => {
+                attempts++;
+                if (attempts < 2) {
+                    throw new Error('Temporary failure');
+                }
+                return 0;
+            };
+
+            orchestrator = new AnalyzerOrchestrator(
+                mockWorkspaceAnalyzer,
+                mockIncrementalHandler,
+                mockConfigService,
+                mockDiagnostics,
+                mockLogger,
+                { defaultRetryAttempts: 2, defaultRetryDelayMs: 10 }
+            );
+
+            await orchestrator.analyzeWorkspace();
+
+            assert.strictEqual(attempts, 2, 'Should retry once before succeeding');
+        });
+
+        test('should stop retrying workspace analysis after reaching limit', async () => {
+            let attempts = 0;
+            mockWorkspaceAnalyzer.analyze = async () => {
+                attempts++;
+                throw new Error('Persistent failure');
+            };
+
+            orchestrator = new AnalyzerOrchestrator(
+                mockWorkspaceAnalyzer,
+                mockIncrementalHandler,
+                mockConfigService,
+                mockDiagnostics,
+                mockLogger,
+                { defaultRetryAttempts: 1, defaultRetryDelayMs: 10 }
+            );
+
+            await orchestrator.analyzeWorkspace();
+
+            assert.strictEqual(attempts, 2, 'Should attempt initial run plus configured retries');
         });
 
         test('should handle analysis errors gracefully', async () => {
@@ -170,16 +221,22 @@ suite('AnalyzerOrchestrator Unit Tests', () => {
             assert.strictEqual(handleFileUpdatedCalled, false, 'Should not analyze excluded files');
         });
 
-        test('should prevent concurrent file analysis', async () => {
+        test('should queue file analyses and process sequentially', async () => {
             const mockDocument = {
                 uri: vscode.Uri.file('/test/file.dart'),
                 getText: () => ''
             } as vscode.TextDocument;
 
             let analysisCount = 0;
+            let running = 0;
+            let maxConcurrent = 0;
+
             mockIncrementalHandler.handleFileUpdated = async () => {
                 analysisCount++;
-                await new Promise(resolve => setTimeout(resolve, 50));
+                running++;
+                maxConcurrent = Math.max(maxConcurrent, running);
+                await new Promise(resolve => setTimeout(resolve, 25));
+                running--;
             };
 
             // Start two analyses
@@ -188,7 +245,8 @@ suite('AnalyzerOrchestrator Unit Tests', () => {
 
             await Promise.all([promise1, promise2]);
             
-            assert.strictEqual(analysisCount, 1, 'Should only run one file analysis at a time');
+            assert.strictEqual(maxConcurrent, 1, 'Should not run file analyses in parallel');
+            assert.strictEqual(analysisCount, 2, 'Should process each file analysis request');
         });
     });
 

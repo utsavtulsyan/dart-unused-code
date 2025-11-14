@@ -39,13 +39,14 @@ export class WorkspaceAnalyzer {
             // Discover Dart files
             StatusBar.showProgress('Discovering Dart files...');
             const dartFiles = await FileSystemUtils.findDartFiles(
-                workspacePath, 
+                workspacePath,
+                config.sourceDirectory,
                 config.excludePatterns || [],
                 this.logger
             );
 
             if (dartFiles.length === 0) {
-                vscode.window.showInformationMessage('No Dart files found in lib/ folder');
+                vscode.window.showInformationMessage('No Dart files found in source folder');
                 return 0;
             }
 

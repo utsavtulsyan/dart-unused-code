@@ -9,6 +9,49 @@ import * as path from 'path';
  * OPTIMIZATION: Analysis runs once in suiteSetup and all tests share the results
  * to avoid repeated expensive analysis operations.
  */
+const waitForCondition = async (
+    predicate: () => boolean,
+    timeoutMs = 30000,
+    pollIntervalMs = 250
+): Promise<void> => {
+    if (predicate()) {
+        return;
+    }
+
+    await new Promise<void>((resolve, reject) => {
+        const dispose = () => {
+            clearTimeout(timeout);
+            clearInterval(poll);
+            diagnosticsWatcher.dispose();
+        };
+
+        const timeout = setTimeout(() => {
+            dispose();
+            reject(new Error('Timed out waiting for condition'));
+        }, timeoutMs);
+
+        const poll = setInterval(() => {
+            if (predicate()) {
+                dispose();
+                resolve();
+            }
+        }, pollIntervalMs);
+
+        const diagnosticsWatcher = vscode.languages.onDidChangeDiagnostics(() => {
+            if (predicate()) {
+                dispose();
+                resolve();
+            }
+        });
+    });
+};
+
+const getAllUnusedDiagnostics = (): vscode.Diagnostic[] => {
+    return vscode.languages.getDiagnostics()
+        .flatMap(([_, diags]) => diags)
+        .filter(d => d.source === 'Dart Unused Code');
+};
+
 suite('Workspace Analysis Integration Tests', () => {
     let workspaceFolder: vscode.WorkspaceFolder;
 
@@ -24,9 +67,11 @@ suite('Workspace Analysis Integration Tests', () => {
 
         // Run analysis ONCE for all tests (diagnostics updated synchronously)
         await vscode.commands.executeCommand('dartUnusedCode.analyzeWorkspace');
+        await waitForCondition(() => getAllUnusedDiagnostics().length >= 2);
     });
 
     test('should analyze workspace and detect unused methods', async function () {
+        await waitForCondition(() => getAllUnusedDiagnostics().length >= 2);
         // Get all diagnostics (analysis already done in suiteSetup)
         const allDiagnostics = vscode.languages.getDiagnostics();
         const unusedMethodDiagnostics = allDiagnostics
@@ -45,6 +90,11 @@ suite('Workspace Analysis Integration Tests', () => {
         const uri = vscode.Uri.file(examplePath);
 
         // Check diagnostics for example.dart (analysis already done in suiteSetup)
+        await waitForCondition(() =>
+            vscode.languages
+                .getDiagnostics(uri)
+                .some(d => d.source === 'Dart Unused Code' && d.message.includes('multiply'))
+        );
         const diagnostics = vscode.languages.getDiagnostics(uri);
         const unusedDiagnostics = diagnostics.filter(d =>
             d.source === 'Dart Unused Code' && d.message.includes('multiply')
@@ -61,6 +111,11 @@ suite('Workspace Analysis Integration Tests', () => {
         const uri = vscode.Uri.file(userPath);
 
         // Check diagnostics for user.dart (analysis already done in suiteSetup)
+        await waitForCondition(() =>
+            vscode.languages
+                .getDiagnostics(uri)
+                .some(d => d.source === 'Dart Unused Code' && d.message.includes('getFullDetails'))
+        );
         const diagnostics = vscode.languages.getDiagnostics(uri);
         const unusedDiagnostics = diagnostics.filter(d =>
             d.source === 'Dart Unused Code' && d.message.includes('getFullDetails')
@@ -103,6 +158,7 @@ suite('Workspace Analysis Integration Tests', () => {
 
     test('should clear diagnostics', async function () {
         // Verify we have diagnostics (from suiteSetup analysis)
+        await waitForCondition(() => getAllUnusedDiagnostics().length >= 2);
         const allDiagnostics = vscode.languages.getDiagnostics();
         const beforeClear = allDiagnostics
             .flatMap(([uri, diags]) => diags)
@@ -112,6 +168,7 @@ suite('Workspace Analysis Integration Tests', () => {
 
         // Clear diagnostics (updated synchronously)
         await vscode.commands.executeCommand('dartUnusedCode.clearDiagnostics');
+        await waitForCondition(() => getAllUnusedDiagnostics().length === 0);
 
         // Verify diagnostics are cleared
         const afterClearDiagnostics = vscode.languages.getDiagnostics();

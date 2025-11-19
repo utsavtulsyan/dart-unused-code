@@ -2,7 +2,7 @@
 
 Format: [Keep a Changelog](https://keepachangelog.com/) | Versioning: [Semantic Versioning](https://semver.org/)
 
-## [1.1.0](Prerelease) & [1.2.0] Release - 2025-11-18
+## [1.1.0] (Prerelease) & [1.2.0] (Release) - 2025-11-18
 
 ### Added
 - Queued analysis for increased responsiveness and stability

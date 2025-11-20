@@ -1,120 +1,119 @@
 import * as vscode from 'vscode';
 import { ConfigurationService } from '../services/configurationService';
 import { Diagnostics, StatusBar, Notifications } from '../infra';
-import { WorkspaceAnalyzer } from '../core/workspaceAnalyzer';
-import { IncrementalAnalysisHandler } from '../handlers/incrementalAnalysisHandler';
 import { CacheService } from '../services/cacheService';
 import { FileSystemUtils } from '../shared/utils/fileSystemUtils';
 import { AnalyzerConfig, Logger, MethodInfo } from '../shared/types';
-
-enum AnalyzerTaskType {
-    Workspace = 'workspace',
-    File = 'file',
-    Create = 'create',
-    Delete = 'delete',
-    Reanalysis = 'reanalysis'
-}
-
-interface AnalyzerTaskRequest {
-    type: AnalyzerTaskType;
-    resource?: string;
-    run: () => Promise<void>;
-    maxRetries?: number;
-    retryDelayMs?: number;
-}
-
-interface QueuedTask {
-    key: string;
-    request: AnalyzerTaskRequest;
-    completions: Array<() => void>;
-    attempts: number;
-    retryTimeout?: NodeJS.Timeout;
-}
+import { AnalysisQueue } from './analysisQueue';
+import { AnalysisExecutor } from './analysisExecutor';
+import { AnalysisComposer } from './analysisComposer';
+import { FileAnalysisHandler } from './fileAnalysisHandler';
 
 export interface AnalyzerOrchestratorOptions {
-    defaultRetryAttempts?: number;
-    defaultRetryDelayMs?: number;
+    processingIntervalMs?: number;
+    fileEventBatchWindowMs?: number;
 }
 
 /**
  * Main orchestrator for Dart unused code analysis.
  * Coordinates between workspace analysis, incremental updates, and lifecycle events.
- * 
- * Single Responsibility: Orchestrate high-level analysis workflows and manage state.
+ * Uses AnalysisQueue and AnalysisExecutor for task management and execution.
  */
 export class AnalyzerOrchestrator {
-    private readonly taskQueue: QueuedTask[] = [];
-    private isProcessingQueue = false;
-    private currentTaskKey?: string;
     private unusedReanalysisTimer?: NodeJS.Timeout;
     private currentReanalysisIntervalMs?: number;
-    private readonly pendingRetryKeys = new Set<string>();
-    private readonly defaultRetryAttempts: number;
-    private readonly defaultRetryDelayMs: number;
     private readonly configChangeDisposable: vscode.Disposable;
+    private queueProcessingInterval?: NodeJS.Timeout;
+    private readonly processingIntervalMs: number;
+    private readonly fileEventBatchWindowMs: number;
+    private fileEventBatchTimer?: NodeJS.Timeout;
+    private pendingFileEvents: Array<{ type: 'create' | 'update' | 'delete'; filePath: string }> = [];
 
     constructor(
-        private readonly workspaceAnalyzer: WorkspaceAnalyzer,
-        private readonly incrementalAnalysisHandler: IncrementalAnalysisHandler,
+        private readonly analysisQueue: AnalysisQueue,
+        private readonly analysisExecutor: AnalysisExecutor,
+        private readonly fileAnalysisHandler: FileAnalysisHandler,
         private readonly configService: ConfigurationService,
         private readonly diagnostics: Diagnostics,
         private readonly cache: CacheService,
         private readonly logger: Logger,
         options: AnalyzerOrchestratorOptions = {}
     ) {
-        this.defaultRetryAttempts = Math.max(0, options.defaultRetryAttempts ?? 2);
-        this.defaultRetryDelayMs = Math.max(0, options.defaultRetryDelayMs ?? 250);
+        this.processingIntervalMs = options.processingIntervalMs ?? 500;
+        this.fileEventBatchWindowMs = options.fileEventBatchWindowMs ?? 300; // 300ms batch window
         this.refreshReanalysisSchedule();
+        this.startQueueProcessing();
         this.configChangeDisposable = this.configService.onDidChangeConfiguration((config) => {
             this.logger.debug('Configuration changed, updating orchestrator state');
             this.handleConfigurationChange(config);
         });
     }
 
-    private enqueueTask(request: AnalyzerTaskRequest): Promise<void> {
-        const key = this.createTaskKey(request);
-        let resolveTask!: () => void;
-
-        const completion = new Promise<void>((resolve) => {
-            resolveTask = resolve;
-        });
-
-        const task: QueuedTask = {
-            key,
-            request,
-            completions: [resolveTask],
-            attempts: 0
-        };
-
-        this.taskQueue.push(task);
-
-        void this.processQueue();
-
-        return completion;
+    /**
+     * Starts periodic queue processing.
+     */
+    private startQueueProcessing(): void {
+        this.queueProcessingInterval = setInterval(() => {
+            void this.processQueue();
+        }, this.processingIntervalMs);
     }
 
-    private createTaskKey(request: AnalyzerTaskRequest): string {
-        return request.resource ? `${request.type}:${request.resource}` : request.type;
-    }
-
-    private isTaskQueuedOrRunning(key: string): boolean {
-        if (this.currentTaskKey === key) {
-            return true;
+    /**
+     * Processes the analysis queue.
+     */
+    private async processQueue(): Promise<void> {
+        // Skip if already processing or queue is empty
+        if (this.analysisQueue.isProcessing() || this.analysisQueue.isEmpty()) {
+            return;
         }
 
-        if (this.pendingRetryKeys.has(key)) {
-            return true;
+        const config = this.configService.getConfiguration();
+        if (!config.enabled) {
+            return;
         }
 
-        return this.taskQueue.some(task => task.key === key);
+        this.analysisQueue.setProcessing(true);
+
+        try {
+            const task = this.analysisQueue.dequeue();
+            if (!task) {
+                return;
+            }
+
+            this.logger.debug(`Processing task ${task.id} from queue`);
+            StatusBar.showProgress('Analyzing...');
+
+            const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+            if (!workspaceFolder) {
+                this.logger.warn('No workspace folder found for analysis');
+                return;
+            }
+
+            const workspacePath = workspaceFolder.uri.fsPath;
+
+            try {
+                await this.analysisExecutor.executeTask(task, workspacePath, config);
+                this.logger.debug(`Task ${task.id} completed successfully`);
+            } catch (error) {
+                this.logger.error(`Task ${task.id} failed: ${this.formatError(error)}`);
+                Notifications.showError(`Analysis error: ${this.formatError(error)}`);
+            }
+        } finally {
+            this.analysisQueue.setProcessing(false);
+            StatusBar.hide();
+        }
     }
 
+    /**
+     * Refreshes the periodic reanalysis schedule based on configuration.
+     */
     private refreshReanalysisSchedule(config?: AnalyzerConfig): void {
         const resolvedConfig = config ?? this.configService.getConfiguration();
         if (!resolvedConfig.enabled) {
             this.clearReanalysisSchedule();
             return;
         }
+
         const minutes = resolvedConfig.unusedCodeReanalysisIntervalMinutes;
 
         if (!minutes || minutes <= 0) {
@@ -134,6 +133,9 @@ export class AnalyzerOrchestrator {
         }, intervalMs);
     }
 
+    /**
+     * Clears the periodic reanalysis schedule.
+     */
     private clearReanalysisSchedule(): void {
         if (this.unusedReanalysisTimer) {
             clearInterval(this.unusedReanalysisTimer);
@@ -142,16 +144,23 @@ export class AnalyzerOrchestrator {
         this.currentReanalysisIntervalMs = undefined;
     }
 
+    /**
+     * Handles configuration changes.
+     */
     private handleConfigurationChange(config: AnalyzerConfig): void {
         this.refreshReanalysisSchedule(config);
 
         if (!config.enabled) {
             this.logger.info('Analyzer disabled via configuration change');
             this.diagnostics.clear();
+            this.analysisQueue.clear();
             StatusBar.hide();
         }
     }
 
+    /**
+     * Enqueues a reanalysis of all cached unused methods.
+     */
     private async enqueueUnusedMethodReanalysis(): Promise<void> {
         const config = this.configService.getConfiguration();
         if (!config.enabled) {
@@ -170,40 +179,15 @@ export class AnalyzerOrchestrator {
             return;
         }
 
-        const groupedByFile = this.groupMethodsByFile(cachedMethods);
-        const key = AnalyzerTaskType.Reanalysis;
-
-        if (this.isTaskQueuedOrRunning(key)) {
-            return;
-        }
-
-        await this.enqueueTask({
-            type: AnalyzerTaskType.Reanalysis,
-            run: async () => {
-                StatusBar.showProgress('Reanalyzing unused methods...');
-                try {
-                    let errorToThrow: unknown | undefined;
-                    for (const [filePath, methods] of groupedByFile) {
-                        try {
-                            await this.incrementalAnalysisHandler.reanalyzeCachedMethods(filePath, methods);
-                        } catch (error) {
-                            errorToThrow = error;
-                            this.logger.error(` Reanalysis failed for ${filePath}: ${this.formatError(error)}`);
-                        }
-                    }
-
-                    if (errorToThrow) {
-                        throw errorToThrow;
-                    }
-                } finally {
-                    StatusBar.hide();
-                }
-            },
-            maxRetries: this.defaultRetryAttempts,
-            retryDelayMs: this.defaultRetryDelayMs
-        });
+        // Compose a reference recheck task (no extraction, just checking)
+        const task = AnalysisComposer.composeReferenceRecheckAnalysis();
+        this.analysisQueue.enqueue(task);
+        this.logger.info(`Queued periodic reanalysis of ${cachedMethods.length} cached methods`);
     }
 
+    /**
+     * Groups methods by file path.
+     */
     private groupMethodsByFile(methods: MethodInfo[]): Map<string, MethodInfo[]> {
         const grouped = new Map<string, MethodInfo[]>();
 
@@ -218,75 +202,9 @@ export class AnalyzerOrchestrator {
         return grouped;
     }
 
-    private clearRetryTimeout(task: QueuedTask): void {
-        if (task.retryTimeout) {
-            clearTimeout(task.retryTimeout);
-            task.retryTimeout = undefined;
-        }
-        this.pendingRetryKeys.delete(task.key);
-    }
-
-    private scheduleRetry(task: QueuedTask, error: unknown): boolean {
-        const retries = task.request.maxRetries ?? this.defaultRetryAttempts;
-        if (task.attempts >= retries) {
-            this.logger.error(` Task ${task.key} failed after ${task.attempts + 1} attempt(s): ${this.formatError(error)}`);
-            this.clearRetryTimeout(task);
-            this.taskQueue.shift();
-            task.completions.forEach((resolve) => resolve());
-            return false;
-        }
-
-        task.attempts += 1;
-        const remaining = retries - task.attempts + 1;
-        const delay = task.request.retryDelayMs ?? this.defaultRetryDelayMs;
-        this.logger.warn(` Task ${task.key} failed (will retry ${remaining} more time(s)) in ${delay}ms: ${this.formatError(error)}`);
-
-        this.clearRetryTimeout(task);
-        this.pendingRetryKeys.add(task.key);
-        task.retryTimeout = setTimeout(() => {
-            task.retryTimeout = undefined;
-            this.pendingRetryKeys.delete(task.key);
-            this.taskQueue.push(task);
-            void this.processQueue();
-        }, delay);
-
-        this.taskQueue.shift();
-        return true;
-    }
-
-    private async processQueue(): Promise<void> {
-        if (this.isProcessingQueue) {
-            return;
-        }
-
-        this.isProcessingQueue = true;
-
-        while (this.taskQueue.length > 0) {
-            const task = this.taskQueue[0];
-            this.currentTaskKey = task.key;
-            const { request, completions } = task;
-
-            try {
-                await request.run();
-                this.clearRetryTimeout(task);
-                this.taskQueue.shift();
-                completions.forEach((resolve) => resolve());
-            } catch (error) {
-                const scheduled = this.scheduleRetry(task, error);
-                if (scheduled) {
-                    this.currentTaskKey = undefined;
-                    this.isProcessingQueue = false;
-                    return;
-                }
-            }
-
-            this.currentTaskKey = undefined;
-        }
-
-        this.currentTaskKey = undefined;
-        this.isProcessingQueue = false;
-    }
-
+    /**
+     * Formats an error for logging.
+     */
     private formatError(error: unknown): string {
         if (error instanceof Error) {
             return error.message;
@@ -311,31 +229,21 @@ export class AnalyzerOrchestrator {
 
         this.refreshReanalysisSchedule(config);
 
-        return this.enqueueTask({
-            type: AnalyzerTaskType.Workspace,
-            run: async () => {
-                const workspaceFolders = vscode.workspace.workspaceFolders;
-                if (!workspaceFolders) {
-                    this.diagnostics.clear();
-                    Notifications.showWarning('No workspace folder open');
-                    return;
-                }
+        const workspaceFolders = vscode.workspace.workspaceFolders;
+        if (!workspaceFolders) {
+            this.diagnostics.clear();
+            Notifications.showWarning('No workspace folder open');
+            return;
+        }
 
-                StatusBar.showProgress();
+        // Clear previous diagnostics
+        this.diagnostics.clear();
 
-                try {
-                    const unusedCount = await this.workspaceAnalyzer.analyze(workspaceFolders[0].uri.fsPath, config);
-                    Notifications.showInfo(`Found ${unusedCount} unused method(s)`);
-                } catch (error) {
-                    Notifications.showError(`Analysis error: ${this.formatError(error)}`);
-                    throw error;
-                } finally {
-                    StatusBar.hide();
-                }
-            },
-            maxRetries: this.defaultRetryAttempts,
-            retryDelayMs: this.defaultRetryDelayMs
-        });
+        // Compose and enqueue workspace analysis task
+        const task = AnalysisComposer.composeWorkspaceAnalysis();
+        this.analysisQueue.enqueue(task);
+
+        this.logger.info(`Workspace analysis queued`);
     }
 
     /**
@@ -349,6 +257,7 @@ export class AnalyzerOrchestrator {
         if (!config.incrementalAnalysis) {
             return;
         }
+
         const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
         if (!workspaceFolder) {
             return;
@@ -367,23 +276,13 @@ export class AnalyzerOrchestrator {
 
         this.refreshReanalysisSchedule(config);
 
-        return this.enqueueTask({
-            type: AnalyzerTaskType.File,
-            resource: document.uri.fsPath,
-            run: async () => {
-                StatusBar.showProgress('Analyzing...');
-
-                try {
-                    await this.incrementalAnalysisHandler.handleFileUpdated(document);
-                } catch (error) {
-                    throw error;
-                } finally {
-                    StatusBar.hide();
-                }
-            },
-            maxRetries: this.defaultRetryAttempts,
-            retryDelayMs: this.defaultRetryDelayMs
-        });
+        // Use file analysis handler to enqueue update
+        await this.fileAnalysisHandler.handleFileUpdate(
+            document.uri.fsPath,
+            config.excludePatterns,
+            workspaceFolder.uri.fsPath,
+            config
+        );
     }
 
     /**
@@ -397,22 +296,33 @@ export class AnalyzerOrchestrator {
             return;
         }
 
-        return this.enqueueTask({
-            type: AnalyzerTaskType.Create,
-            resource: createdFilePath,
-            run: async () => {
-                StatusBar.showProgress('Analyzing...');
-                try {
-                    await this.incrementalAnalysisHandler.handleFileCreated(createdFilePath);
-                } catch (error) {
-                    throw error;
-                } finally {
-                    StatusBar.hide();
-                }
-            },
-            maxRetries: this.defaultRetryAttempts,
-            retryDelayMs: this.defaultRetryDelayMs
-        });
+        const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+        if (!workspaceFolder) {
+            return;
+        }
+
+        // Batch file events to handle bulk operations (like branch switches)
+        this.batchFileEvent('create', createdFilePath);
+    }
+
+    /**
+     * Handles file changes (saves).
+     */
+    async handleFileChanged(changedFilePath: string): Promise<void> {
+        const config = this.configService.getConfiguration();
+        this.refreshReanalysisSchedule(config);
+
+        if (!config.enabled || !config.incrementalAnalysis) {
+            return;
+        }
+
+        const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+        if (!workspaceFolder) {
+            return;
+        }
+
+        // Batch file change events to prevent excessive analysis on frequent saves
+        this.batchFileEvent('update', changedFilePath);
     }
 
     /**
@@ -426,27 +336,112 @@ export class AnalyzerOrchestrator {
             return;
         }
 
-        return this.enqueueTask({
-            type: AnalyzerTaskType.Delete,
-            resource: deletedFilePath,
-            run: async () => {
-                StatusBar.showProgress('Processing...');
+        const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+        if (!workspaceFolder) {
+            return;
+        }
 
-                try {
-                    await this.incrementalAnalysisHandler.handleFileDeleted(deletedFilePath);
-                } catch (error) {
-                    throw error;
-                } finally {
-                    StatusBar.hide();
-                }
-            },
-            maxRetries: this.defaultRetryAttempts,
-            retryDelayMs: this.defaultRetryDelayMs
-        });
+        // Batch file events to handle bulk operations
+        this.batchFileEvent('delete', deletedFilePath);
     }
 
+    /**
+     * Batches file events to optimize bulk operations.
+     * If many files change rapidly, we'll process them together.
+     * Deduplicates events for the same file (keeps latest event type).
+     */
+    private batchFileEvent(type: 'create' | 'update' | 'delete', filePath: string): void {
+        // Remove any existing events for this file (keep only the latest)
+        this.pendingFileEvents = this.pendingFileEvents.filter(e => e.filePath !== filePath);
+
+        // Add the new event
+        this.pendingFileEvents.push({ type, filePath });
+
+        // Clear existing timer
+        if (this.fileEventBatchTimer) {
+            clearTimeout(this.fileEventBatchTimer);
+        }
+
+        // Set new timer to process batch
+        this.fileEventBatchTimer = setTimeout(() => {
+            void this.processBatchedFileEvents();
+        }, this.fileEventBatchWindowMs);
+    }
+
+    /**
+     * Processes batched file events.
+     * If many files are affected, converts to workspace analysis.
+     */
+    private async processBatchedFileEvents(): Promise<void> {
+        const events = this.pendingFileEvents;
+        this.pendingFileEvents = [];
+        this.fileEventBatchTimer = undefined;
+
+        if (events.length === 0) {
+            return;
+        }
+
+        const config = this.configService.getConfiguration();
+        const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+        if (!workspaceFolder) {
+            return;
+        }
+
+        const workspacePath = workspaceFolder.uri.fsPath;
+
+        // If many files (e.g., >10), do a workspace analysis instead
+        if (events.length > 10) {
+            this.logger.info(
+                `Large batch of ${events.length} file events detected - switching to workspace analysis`
+            );
+            const task = AnalysisComposer.composeWorkspaceAnalysis();
+            this.analysisQueue.enqueue(task);
+            return;
+        }
+
+        // Process individual file events
+        this.logger.debug(`Processing batch of ${events.length} file events`);
+        for (const event of events) {
+            switch (event.type) {
+                case 'create':
+                    await this.fileAnalysisHandler.handleFileCreation(
+                        event.filePath,
+                        config.excludePatterns,
+                        workspacePath,
+                        config
+                    );
+                    break;
+                case 'update':
+                    await this.fileAnalysisHandler.handleFileUpdate(
+                        event.filePath,
+                        config.excludePatterns,
+                        workspacePath,
+                        config
+                    );
+                    break;
+                case 'delete':
+                    await this.fileAnalysisHandler.handleFileDeletion(
+                        event.filePath,
+                        config.excludePatterns,
+                        workspacePath,
+                        config
+                    );
+                    break;
+            }
+        }
+    }
+
+    /**
+     * Disposes resources.
+     */
     dispose(): void {
         this.clearReanalysisSchedule();
+        if (this.queueProcessingInterval) {
+            clearInterval(this.queueProcessingInterval);
+        }
+        if (this.fileEventBatchTimer) {
+            clearTimeout(this.fileEventBatchTimer);
+        }
         this.configChangeDisposable.dispose();
         StatusBar.dispose();
     }

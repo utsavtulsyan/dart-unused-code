@@ -32,17 +32,9 @@ export class FileSystemProvider {
             void this.orchestrator.handleFileCreated(uri.fsPath);
         });
 
-        watcher.onDidChange(async (uri) => {
-            // For changes, we need the document to analyze
-            try {
-                const document = await vscode.workspace.openTextDocument(uri);
-                if (document.languageId === 'dart') {
-                    this.logger.debug(`Analyzing changed file: ${uri.fsPath}`);
-                    void this.orchestrator.analyzeFile(document);
-                }
-            } catch (error) {
-                this.logger.error(`Failed to open document for analysis: ${uri.fsPath} - ${error}`);
-            }
+        watcher.onDidChange((uri) => {
+            this.logger.debug(`File changed: ${uri.fsPath}`);
+            void this.orchestrator.handleFileChanged(uri.fsPath);
         });
 
         watcher.onDidDelete((uri) => {

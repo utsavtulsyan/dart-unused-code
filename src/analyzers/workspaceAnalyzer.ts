@@ -1,12 +1,12 @@
 import * as vscode from 'vscode';
-import { MethodExtractor } from './methodExtractor';
-import { ReferenceAnalyzer } from './referenceAnalyzer';
+import { MethodExtractor } from '../core/methodExtractor';
+import { ReferenceAnalyzer } from '../core/referenceAnalyzer';
 import { Diagnostics } from '../infra/diagnostics';
 import { StatusBar, ProgressInfo } from '../infra/statusBar';
 import { CacheService } from '../services/cacheService';
 import { MetricsService } from '../services/metricsService';
 import { DependencyTrackerService } from '../services/dependencyTrackerService';
-import { DependencyDiscovery } from './dependencyDiscovery';
+import { DependencyDiscovery } from '../core/dependencyDiscovery';
 import { MethodInfo, Logger, AnalyzerConfig } from '../shared/types';
 import { ParallelProcessor } from '../shared/utils/parallelProcessor';
 import { FileSystemUtils } from '../shared/utils/fileSystemUtils';
@@ -138,10 +138,10 @@ export class WorkspaceAnalyzer {
                     const uri = vscode.Uri.file(filePath);
                     const document = await vscode.workspace.openTextDocument(uri);
                     const dependencies = await this.dependencyDiscovery.findFileDependencies(document, workspacePath);
-                    const filteredDependencies = Array.from(dependencies).filter(depPath =>
+                    const filteredDependencies = Array.from(dependencies).filter((depPath: string) =>
                         !FileSystemUtils.shouldExclude(depPath, workspacePath, excludePatterns)
                     );
-                    this.dependencyTracker.setDependencies(filePath, new Set(filteredDependencies));
+                    this.dependencyTracker.setDependencies(filePath, new Set<string>(filteredDependencies));
                 } catch (error) {
                     this.logger.error(`Error building dependencies for ${filePath}: ${error}`);
                 }
@@ -165,7 +165,7 @@ export class WorkspaceAnalyzer {
             dartFiles,
             async (file: string) => {
                 const methods = await this.methodExtractor.extractMethods(file);
-                return methods.filter(m => !m.isPrivate);
+                return methods.filter((m: MethodInfo) => !m.isPrivate);
             },
             concurrency,
             (completed, total) => {

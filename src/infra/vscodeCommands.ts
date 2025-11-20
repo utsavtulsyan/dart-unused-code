@@ -79,8 +79,10 @@ export class VscodeCommands {
 
     /**
      * Finds all references to a symbol at a specific position.
-     * Returns locations where the symbol is used.
-     * @throws Error if the command fails or returns no result
+     * Returns locations where the symbol is used, or empty array if none found.
+     * 
+     * Note: An empty result is a valid outcome (indicates unused symbol),
+     * not an error condition.
      */
     async getReferences(
         uri: vscode.Uri,
@@ -91,10 +93,8 @@ export class VscodeCommands {
             uri,
             position
         );
-        if (!result) {
-            throw new Error(`No references found at ${uri.fsPath}:${position.line}:${position.character}`);
-        }
-        return result;
+        // Return empty array if no references found - this is a valid state
+        return result || [];
     }
 
     /**

@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { ServiceFactory } from './factories/serviceFactory';
 import { AnalyzeWorkspaceCommand, ClearDiagnosticsCommand, ToggleStatusBarDetailCommand } from './commands';
-import { DocumentSaveProvider, FileSystemProvider } from './providers';
+import { FileSystemProvider } from './infra';
 import { LoggingService } from './services/loggingService';
 
 /**
@@ -60,9 +60,6 @@ export function activate(context: vscode.ExtensionContext) {
     );
 
     // Register event providers
-    const documentSaveProvider = new DocumentSaveProvider(orchestrator, loggingService);
-    documentSaveProvider.register(context);
-
     const fileSystemProvider = new FileSystemProvider(orchestrator, loggingService);
     fileSystemProvider.register(context);
 

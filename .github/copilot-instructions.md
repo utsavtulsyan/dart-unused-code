@@ -148,9 +148,13 @@ F5                     # Launch Extension Development Host
 Ctrl+Shift+F5          # Reload Extension Development Host
 
 # Testing
-npm test               # All tests
-npm run test:unit      # Unit only (fast)
+npm run compile-tests  # Compile test files (required after test changes)
+npm test               # All tests (auto-compiles tests via pretest)
+npm run test:unit      # Unit only (fast, requires compile-tests first)
 npm run test:integration # Integration (requires dependencies)
+
+# Important: After modifying test files, always run:
+# npm run compile-tests && npm run test:unit
 ```
 
 ## Essential VS Code API References

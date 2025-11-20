@@ -1,31 +1,31 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import { CacheService } from '../services/cacheService';
-import { Diagnostics, Workspace } from '../infra';
-import { DependencyTrackerService } from '../services/dependencyTrackerService';
-import { MethodAnalyzer } from '../core/methodAnalyzer';
-import { DependencyDiscovery } from '../core/dependencyDiscovery';
-import { MethodInfo, Logger, AnalyzerConfig } from '../shared/types';
+import { Diagnostics } from '../infra/diagnostics';
 import { VscodeCommands } from '../infra/vscodeCommands';
 import { DartPackageUtils } from '../shared/utils/dartPackageUtils';
 import { FileSystemUtils } from '../shared/utils/fileSystemUtils';
+import { Logger, AnalyzerConfig } from '../shared/types';
+import { AnalysisComposer } from './analysisComposer';
+import { AnalysisQueue } from './analysisQueue';
 
 /**
- * Handles file creation events.
- * Single Responsibility: Analyze newly created files and update analysis state.
+ * Handles file lifecycle events by composing and queueing analysis tasks.
+ * Unifies file creation, update, and deletion handling.
  */
-export class FileCreationHandler {
+export class FileAnalysisHandler {
     constructor(
+        private readonly analysisQueue: AnalysisQueue,
         private readonly vscodeCommands: VscodeCommands,
         private readonly cache: CacheService,
-        private readonly methodAnalyzer: MethodAnalyzer,
-        private readonly dependencyTracker: DependencyTrackerService,
-        private readonly dependencyDiscovery: DependencyDiscovery,
         private readonly diagnostics: Diagnostics,
         private readonly logger: Logger
     ) { }
 
-    async handle(
+    /**
+     * Handles file creation by analyzing the new file and its dependencies.
+     */
+    async handleFileCreation(
         createdFilePath: string,
         excludePatterns: string[],
         workspacePath: string,
@@ -37,40 +37,98 @@ export class FileCreationHandler {
             return;
         }
 
-        this.logger.debug(`New file created: ${createdFilePath}`);
+        this.logger.debug(`File created: ${createdFilePath}`);
 
         try {
-            // Load file and find references
+            // Load file and wait for Analysis Server
             const uri = vscode.Uri.file(createdFilePath);
             const document = await vscode.workspace.openTextDocument(uri);
             await new Promise(resolve => setTimeout(resolve, 2000));
 
-            const currentReferences = await this.dependencyDiscovery.findFileDependencies(document, workspacePath);
-            this.logger.debug(`Found ${currentReferences.size} file dependencies in new file`);
+            // Compose and enqueue analysis task
+            const task = AnalysisComposer.composeFileWithDependenciesAnalysis(createdFilePath);
+            this.analysisQueue.enqueue(task);
 
-            // Update dependencies
-            this.dependencyTracker.setDependencies(createdFilePath, currentReferences);
+            // Additionally: Extract method calls to clear now-used methods from cache
+            await this.clearNowUsedMethods(document, workspacePath, config);
 
-            // Analyze new file for unused methods it defines
-            const result = await this.methodAnalyzer.analyzeMethodsInFile(
-                createdFilePath,
-                excludePatterns,
-                workspacePath,
-                config
-            );
-            this.cache.updateFile(createdFilePath, result.unused);
+            this.logger.debug(`Analysis queued for new file: ${createdFilePath}`);
+        } catch (error) {
+            this.logger.error(`Error handling file creation ${createdFilePath}: ${error}`);
+        }
+    }
 
-            // Extract method calls from the new file and check if they were previously marked as unused
-            this.logger.debug(`Extracting method calls to update diagnostics for now-used methods`);
+    /**
+     * Handles file updates by analyzing the file and its dependencies.
+     */
+    async handleFileUpdate(
+        filePath: string,
+        excludePatterns: string[],
+        workspacePath: string,
+        config: AnalyzerConfig
+    ): Promise<void> {
+        // Check if file should be excluded
+        if (FileSystemUtils.shouldExclude(filePath, workspacePath, excludePatterns)) {
+            return;
+        }
+
+        this.logger.debug(`File updated: ${filePath}`);
+
+        try {
+            // Compose and enqueue analysis task
+            const task = AnalysisComposer.composeFileWithDependenciesAnalysis(filePath);
+            this.analysisQueue.enqueue(task);
+
+            this.logger.debug(`Analysis queued for updated file: ${filePath}`);
+        } catch (error) {
+            this.logger.error(`Error handling file update ${filePath}: ${error}`);
+        }
+    }
+
+    /**
+     * Handles file deletion by clearing cache and analyzing dependents.
+     */
+    async handleFileDeletion(
+        deletedFilePath: string,
+        excludePatterns: string[],
+        workspacePath: string,
+        config: AnalyzerConfig
+    ): Promise<void> {
+        this.logger.debug(`File deleted: ${deletedFilePath}`);
+
+        try {
+            // Compose and enqueue deletion analysis task
+            const task = AnalysisComposer.composeFileDeletionAnalysis(deletedFilePath);
+            this.analysisQueue.enqueue(task);
+
+            this.logger.debug(`Deletion analysis queued for: ${deletedFilePath}`);
+        } catch (error) {
+            this.logger.error(`Error handling file deletion ${deletedFilePath}: ${error}`);
+        }
+    }
+
+    /**
+     * Extracts method calls from a document and removes them from the unused cache.
+     * This handles the case where a new file uses previously unused methods.
+     */
+    private async clearNowUsedMethods(
+        document: vscode.TextDocument,
+        workspacePath: string,
+        config: AnalyzerConfig
+    ): Promise<void> {
+        try {
+            this.logger.debug(`Extracting method calls to clear now-used methods`);
             const methodCallsNowUsed = await this.extractMethodCallDefinitions(document, workspacePath);
-            this.logger.debug(`Found ${methodCallsNowUsed.length} method call definitions in new file`);
+            this.logger.debug(`Found ${methodCallsNowUsed.length} method call definitions`);
 
-            // For each method definition, check if it was in the cache and remove it
+            // Remove each method from cache if it exists
             let removedCount = 0;
             for (const methodDef of methodCallsNowUsed) {
                 const cachedMethod = this.cache.get(methodDef.filePath, methodDef.line);
                 if (cachedMethod) {
-                    this.logger.debug(`Removing now-used method from cache: ${cachedMethod.name} at ${methodDef.filePath}:${methodDef.line}`);
+                    this.logger.debug(
+                        `Removing now-used method: ${cachedMethod.name} at ${methodDef.filePath}:${methodDef.line}`
+                    );
                     this.cache.remove(cachedMethod);
 
                     // Update diagnostics for that file
@@ -78,7 +136,6 @@ export class FileCreationHandler {
                     if (remainingUnused.length === 0) {
                         this.diagnostics.clearFile(methodDef.filePath);
                     } else {
-                        // Re-report remaining unused methods for this file
                         this.diagnostics.clearFile(methodDef.filePath);
                         for (const method of remainingUnused) {
                             this.diagnostics.reportUnusedMethod(method, config);
@@ -88,10 +145,9 @@ export class FileCreationHandler {
                 }
             }
 
-            this.logger.debug(`Removed ${removedCount} now-used methods from cache`);
-            this.logger.debug(`Analysis complete for new file: ${createdFilePath}`);
+            this.logger.debug(`Cleared ${removedCount} now-used methods from cache`);
         } catch (error) {
-            this.logger.error(`Error analyzing new file ${createdFilePath}: ${error}`);
+            this.logger.error(`Error clearing now-used methods: ${error}`);
         }
     }
 
@@ -125,7 +181,8 @@ export class FileCreationHandler {
 
             // Find declaration modifier
             const declarationModifierIndex = legend.tokenModifiers.indexOf('declaration');
-            const declarationModifierBit = declarationModifierIndex >= 0 ? (1 << declarationModifierIndex) : 0;
+            const declarationModifierBit =
+                declarationModifierIndex >= 0 ? 1 << declarationModifierIndex : 0;
 
             if (methodTypeIndices.size === 0) {
                 this.logger.trace(`No method/function token types found`);
@@ -152,7 +209,8 @@ export class FileCreationHandler {
                 }
 
                 const isMethodLike = methodTypeIndices.has(tokenType);
-                const isDeclaration = declarationModifierBit !== 0 && (tokenModifiers & declarationModifierBit) !== 0;
+                const isDeclaration =
+                    declarationModifierBit !== 0 && (tokenModifiers & declarationModifierBit) !== 0;
 
                 // We want method calls (not declarations)
                 if (isMethodLike && !isDeclaration) {
@@ -163,16 +221,20 @@ export class FileCreationHandler {
 
                         if (defs && defs.length > 0) {
                             for (const def of defs) {
-                                const { filePath: defPath, line: defLine } = this.vscodeCommands.extractDefinitionLocation(def);
+                                const { filePath: defPath, line: defLine } =
+                                    this.vscodeCommands.extractDefinitionLocation(def);
 
-                                // Skip same file, external packages, and different packages
+                                // Skip same file
                                 if (defPath === document.uri.fsPath) {
                                     continue;
                                 }
 
-                                // Normalize path separators for consistent checks across platforms
+                                // Skip external packages
                                 const normalizedDefPath = defPath.split(path.sep).join('/');
-                                if (normalizedDefPath.includes('.pub-cache') || normalizedDefPath.includes('/.dart_tool/')) {
+                                if (
+                                    normalizedDefPath.includes('.pub-cache') ||
+                                    normalizedDefPath.includes('/.dart_tool/')
+                                ) {
                                     continue;
                                 }
 
@@ -192,7 +254,6 @@ export class FileCreationHandler {
                     }
                 }
             }
-
         } catch (error) {
             this.logger.error(`Error extracting method call definitions: ${error}`);
         }

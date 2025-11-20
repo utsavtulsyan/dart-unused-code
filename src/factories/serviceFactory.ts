@@ -4,18 +4,22 @@ import {
     MetricsService,
     CacheService,
     DependencyTrackerService,
-    LoggingService
+    LoggingService,
 } from '../services';
 import {
     MethodAnalyzer,
     MethodExtractor,
     ReferenceAnalyzer,
     DependencyDiscovery,
-    WorkspaceAnalyzer
 } from '../core';
-import { AnalyzerOrchestrator } from '../analyzers/analyzerOrchestrator';
+import {
+    AnalyzerOrchestrator,
+    AnalysisQueue,
+    AnalysisExecutor,
+    FileAnalysisHandler,
+    WorkspaceAnalyzer,
+} from '../analyzers';
 import { VscodeCommands, Diagnostics, StatusBar } from '../infra';
-import { FileCreationHandler, FileUpdateHandler, FileDeletionHandler, IncrementalAnalysisHandler } from '../handlers';
 
 /**
  * Service container for dependency injection.
@@ -24,7 +28,6 @@ import { FileCreationHandler, FileUpdateHandler, FileDeletionHandler, Incrementa
  * Single Responsibility: Manage object graph construction and lifecycle.
  */
 export class ServiceFactory {
-
     // Services (stateless or configuration)
     private readonly configService: ConfigurationService;
     private readonly diagnostics: Diagnostics;
@@ -37,13 +40,11 @@ export class ServiceFactory {
     private readonly referenceAnalyzer: ReferenceAnalyzer;
     private readonly methodAnalyzer: MethodAnalyzer;
     private readonly dependencyDiscovery: DependencyDiscovery;
-    private readonly workspaceAnalyzer: WorkspaceAnalyzer;
 
-    // File event handlers
-    private readonly fileCreationHandler: FileCreationHandler;
-    private readonly fileUpdateHandler: FileUpdateHandler;
-    private readonly fileDeletionHandler: FileDeletionHandler;
-    private readonly incrementalAnalysisHandler: IncrementalAnalysisHandler;
+    // Analysis components
+    private readonly analysisQueue: AnalysisQueue;
+    private readonly analysisExecutor: AnalysisExecutor;
+    private readonly fileAnalysisHandler: FileAnalysisHandler;
 
     // Main orchestrator
     private readonly orchestrator: AnalyzerOrchestrator;
@@ -61,17 +62,25 @@ export class ServiceFactory {
         this.diagnostics = new Diagnostics(diagnosticCollection);
         this.metrics = new MetricsService();
         this.cache = new CacheService(loggingService.createChild('Cache'));
-        this.dependencyTracker = new DependencyTrackerService(loggingService.createChild('DepTracker'));
+        this.dependencyTracker = new DependencyTrackerService(
+            loggingService.createChild('DepTracker')
+        );
 
         // Initialize core analyzers
         const config = this.configService.getConfiguration();
-        this.methodExtractor = new MethodExtractor(vscodeCommands, loggingService.createChild('MethodExtractor'));
-        this.referenceAnalyzer = new ReferenceAnalyzer(vscodeCommands, loggingService.createChild('RefAnalyzer'));
+        this.methodExtractor = new MethodExtractor(
+            vscodeCommands,
+            loggingService.createChild('MethodExtractor')
+        );
+        this.referenceAnalyzer = new ReferenceAnalyzer(
+            vscodeCommands,
+            loggingService.createChild('RefAnalyzer')
+        );
         this.dependencyDiscovery = new DependencyDiscovery(
             loggingService.createChild('DepDiscovery'),
             config.sourceDirectory
         );
-        this.configService.onDidChangeConfiguration((updatedConfig) => {
+        this.configService.onDidChangeConfiguration(updatedConfig => {
             this.dependencyDiscovery.updateSourceDirectory(updatedConfig.sourceDirectory);
         });
         this.methodAnalyzer = new MethodAnalyzer(
@@ -81,61 +90,34 @@ export class ServiceFactory {
             loggingService.createChild('MethodAnalyzer')
         );
 
-        // Initialize specialized analyzers
-        this.workspaceAnalyzer = new WorkspaceAnalyzer(
+        // Initialize analysis queue and executor
+        this.analysisQueue = new AnalysisQueue(loggingService.createChild('AnalysisQueue'));
+
+        this.analysisExecutor = new AnalysisExecutor(
             this.methodExtractor,
             this.referenceAnalyzer,
             this.diagnostics,
             this.cache,
-            this.metrics,
             this.dependencyTracker,
             this.dependencyDiscovery,
-            loggingService.createChild('WorkspaceAnalyzer')
+            loggingService.createChild('AnalysisExecutor')
         );
 
-        // Initialize file event handlers
-        this.fileCreationHandler = new FileCreationHandler(
+        // Initialize file analysis handler
+        this.fileAnalysisHandler = new FileAnalysisHandler(
+            this.analysisQueue,
             vscodeCommands,
             this.cache,
-            this.methodAnalyzer,
-            this.dependencyTracker,
-            this.dependencyDiscovery,
             this.diagnostics,
-            loggingService.createChild('FileCreation')
-        );
-
-        this.fileUpdateHandler = new FileUpdateHandler(
-            vscodeCommands,
-            this.cache,
-            this.dependencyTracker,
-            this.methodAnalyzer,
-            this.dependencyDiscovery,
-            this.diagnostics,
-            loggingService.createChild('FileUpdate')
-        );
-
-        this.fileDeletionHandler = new FileDeletionHandler(
-            this.cache,
-            this.methodAnalyzer,
-            this.dependencyTracker,
-            loggingService.createChild('FileDeletion')
-        );
-
-        // Create incremental analysis handler
-        this.incrementalAnalysisHandler = new IncrementalAnalysisHandler(
-            this.configService,
-            this.metrics,
-            this.fileUpdateHandler,
-            this.fileCreationHandler,
-            this.fileDeletionHandler,
-            loggingService.createChild('IncrementalAnalysis')
+            loggingService.createChild('FileAnalysis')
         );
 
         // Initialize orchestrator
         StatusBar.initialize(statusBarItem);
         this.orchestrator = new AnalyzerOrchestrator(
-            this.workspaceAnalyzer,
-            this.incrementalAnalysisHandler,
+            this.analysisQueue,
+            this.analysisExecutor,
+            this.fileAnalysisHandler,
             this.configService,
             this.diagnostics,
             this.cache,

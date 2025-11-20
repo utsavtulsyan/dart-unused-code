@@ -39,3 +39,70 @@ export interface MethodAnalysisResult {
     readonly isUnused: boolean;
     readonly referenceCount: number;
 }
+
+/**
+ * Scope of files to analyze
+ */
+export enum AnalysisScopeType {
+    /** All workspace files */
+    WORKSPACE = 'workspace',
+    /** Specific files only */
+    FILES = 'files',
+    /** Single file plus its dependencies */
+    FILE_WITH_DEPENDENCIES = 'file_with_dependencies',
+}
+
+/**
+ * Defines which files to analyze
+ */
+export interface AnalysisScope {
+    type: AnalysisScopeType;
+    /** Target files (for FILES and FILE_WITH_DEPENDENCIES) */
+    files?: string[];
+    /** Whether to include dependencies (resolved during execution) */
+    includeDependencies?: boolean;
+}
+
+/**
+ * Types of atomic analysis operations
+ */
+export enum AnalysisOperationType {
+    /** Extract methods from files */
+    EXTRACT_METHODS = 'extract_methods',
+    /** Check references for methods */
+    CHECK_REFERENCES = 'check_references',
+    /** Clear cached data for files */
+    CLEAR_CACHE = 'clear_cache',
+}
+
+/**
+ * Atomic analysis operation
+ */
+export interface AnalysisOperation {
+    type: AnalysisOperationType;
+    /** Files to operate on (resolved at execution time) */
+    files: string[];
+}
+
+/**
+ * Composed analysis task with multiple operations
+ */
+export interface AnalysisTask {
+    id: string;
+    scope: AnalysisScope;
+    operations: AnalysisOperation[];
+    /** Timestamp when task was created */
+    timestamp: number;
+}
+
+/**
+ * Result of merging analysis tasks
+ */
+export interface MergeResult {
+    /** Whether tasks were merged */
+    merged: boolean;
+    /** Resulting task after merge (if merged) */
+    task?: AnalysisTask;
+    /** Reason for not merging (if not merged) */
+    reason?: string;
+}

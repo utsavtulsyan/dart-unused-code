@@ -14,37 +14,51 @@ suite('AnalyzerOrchestrator Unit Tests', () => {
     let mockConfigService: ConfigurationService;
     let mockDiagnostics: Diagnostics;
     let mockLogger: ReturnType<typeof createMockLogger>;
+    let mockCache: { getAll: () => any[] };
+    let cachedMethods: any[];
+    let currentConfig: any;
 
     setup(() => {
         mockLogger = createMockLogger();
-        
+        cachedMethods = [];
+        mockCache = {
+            getAll: () => cachedMethods
+        };
+        currentConfig = {
+            enabled: true,
+            sourceDirectory: 'lib',
+            excludePatterns: [],
+            severity: vscode.DiagnosticSeverity.Warning,
+            maxConcurrency: 5,
+            incrementalAnalysis: true,
+            analysisDelay: 2000,
+            unusedCodeReanalysisIntervalMinutes: 0
+        };
+
         // Create minimal mocks
         mockWorkspaceAnalyzer = {
             analyze: async () => 0
         } as any;
 
         mockIncrementalHandler = {
-            handleFileUpdated: async () => {},
-            handleFileCreated: async () => {},
-            handleFileDeleted: async () => {}
+            handleFileUpdated: async () => { },
+            handleFileCreated: async () => { },
+            handleFileDeleted: async () => { },
+            reanalyzeFile: async () => { },
+            reanalyzeCachedMethods: async () => { }
         } as any;
 
         mockConfigService = {
-            getConfiguration: () => ({
-                enabled: true,
-                excludePatterns: [],
-                severity: vscode.DiagnosticSeverity.Warning,
-                maxConcurrency: 5,
-                analyzeOnSave: true
-            })
+            getConfiguration: () => currentConfig,
+            onDidChangeConfiguration: () => ({ dispose: () => { } } as vscode.Disposable)
         } as any;
 
         mockDiagnostics = {
-            clear: () => {},
-            clearFile: () => {},
-            reportUnusedMethod: () => {},
-            reportUnusedMethods: () => {},
-            reportUnusedMethodsForFile: () => {}
+            clear: () => { },
+            clearFile: () => { },
+            reportUnusedMethod: () => { },
+            reportUnusedMethods: () => { },
+            reportUnusedMethodsForFile: () => { }
         } as any;
 
         orchestrator = new AnalyzerOrchestrator(
@@ -52,6 +66,7 @@ suite('AnalyzerOrchestrator Unit Tests', () => {
             mockIncrementalHandler,
             mockConfigService,
             mockDiagnostics,
+            mockCache as any,
             mockLogger
         );
     });
@@ -65,20 +80,21 @@ suite('AnalyzerOrchestrator Unit Tests', () => {
             };
 
             await orchestrator.analyzeWorkspace();
-            
+
             assert.strictEqual(analyzeWorkspaceCalled, true, 'Should call workspace analyzer');
         });
 
         test('should not analyze when disabled', async () => {
-            mockConfigService.getConfiguration = () => ({
+            currentConfig = {
                 enabled: false,
                 sourceDirectory: 'lib',
                 excludePatterns: [],
                 severity: vscode.DiagnosticSeverity.Warning,
                 maxConcurrency: 5,
-                analyzeOnSave: true,
-                analysisDelay: 500
-            });
+                incrementalAnalysis: true,
+                analysisDelay: 500,
+                unusedCodeReanalysisIntervalMinutes: 0
+            };
 
             let analyzeWorkspaceCalled = false;
             mockWorkspaceAnalyzer.analyze = async () => {
@@ -87,8 +103,8 @@ suite('AnalyzerOrchestrator Unit Tests', () => {
             };
 
             await orchestrator.analyzeWorkspace();
-            
-            assert.strictEqual(analyzeWorkspaceCalled, false, 'Should not call workspace analyzer when disabled');
+
+            assert.ok(analyzeWorkspaceCalled === false, 'Should not call workspace analyzer when disabled');
         });
 
         test('should queue workspace analysis requests and process sequentially', async () => {
@@ -129,6 +145,7 @@ suite('AnalyzerOrchestrator Unit Tests', () => {
                 mockIncrementalHandler,
                 mockConfigService,
                 mockDiagnostics,
+                mockCache as any,
                 mockLogger,
                 { defaultRetryAttempts: 2, defaultRetryDelayMs: 10 }
             );
@@ -150,6 +167,7 @@ suite('AnalyzerOrchestrator Unit Tests', () => {
                 mockIncrementalHandler,
                 mockConfigService,
                 mockDiagnostics,
+                mockCache as any,
                 mockLogger,
                 { defaultRetryAttempts: 1, defaultRetryDelayMs: 10 }
             );
@@ -166,7 +184,7 @@ suite('AnalyzerOrchestrator Unit Tests', () => {
 
             // Should not throw
             await orchestrator.analyzeWorkspace();
-            
+
             assert.ok(true, 'Should handle errors without throwing');
         });
     });
@@ -184,8 +202,29 @@ suite('AnalyzerOrchestrator Unit Tests', () => {
             };
 
             await orchestrator.analyzeFile(mockDocument);
-            
+
             assert.strictEqual(handleFileUpdatedCalled, true, 'Should call incremental handler');
+        });
+
+        test('should respect incrementalAnalysis setting', async () => {
+            currentConfig = {
+                ...currentConfig,
+                incrementalAnalysis: false
+            };
+
+            const mockDocument = {
+                uri: vscode.Uri.file('/test/file.dart'),
+                getText: () => ''
+            } as vscode.TextDocument;
+
+            let handleFileUpdatedCalled = false;
+            mockIncrementalHandler.handleFileUpdated = async () => {
+                handleFileUpdatedCalled = true;
+            };
+
+            await orchestrator.analyzeFile(mockDocument);
+
+            assert.strictEqual(handleFileUpdatedCalled, false, 'Should skip analysis when incrementalAnalysis is disabled');
         });
 
         test('should skip excluded files', async () => {
@@ -196,15 +235,16 @@ suite('AnalyzerOrchestrator Unit Tests', () => {
                 return;
             }
 
-            mockConfigService.getConfiguration = () => ({
+            currentConfig = {
                 enabled: true,
                 sourceDirectory: 'lib',
                 excludePatterns: ['**/*.g.dart'],
                 severity: vscode.DiagnosticSeverity.Warning,
                 maxConcurrency: 5,
-                analyzeOnSave: true,
-                analysisDelay: 500
-            });
+                incrementalAnalysis: true,
+                analysisDelay: 500,
+                unusedCodeReanalysisIntervalMinutes: 0
+            };
 
             const mockDocument = {
                 uri: vscode.Uri.file(workspaceFolders[0].uri.fsPath + '/test/file.g.dart'),
@@ -217,7 +257,7 @@ suite('AnalyzerOrchestrator Unit Tests', () => {
             };
 
             await orchestrator.analyzeFile(mockDocument);
-            
+
             assert.strictEqual(handleFileUpdatedCalled, false, 'Should not analyze excluded files');
         });
 
@@ -244,7 +284,7 @@ suite('AnalyzerOrchestrator Unit Tests', () => {
             const promise2 = orchestrator.analyzeFile(mockDocument);
 
             await Promise.all([promise1, promise2]);
-            
+
             assert.strictEqual(maxConcurrent, 1, 'Should not run file analyses in parallel');
             assert.strictEqual(analysisCount, 2, 'Should process each file analysis request');
         });
@@ -258,7 +298,7 @@ suite('AnalyzerOrchestrator Unit Tests', () => {
             };
 
             await orchestrator.handleFileCreated('/test/new-file.dart');
-            
+
             assert.strictEqual(handleFileCreatedCalled, true, 'Should handle file creation');
         });
 
@@ -269,7 +309,7 @@ suite('AnalyzerOrchestrator Unit Tests', () => {
             };
 
             await orchestrator.handleFileDeleted('/test/deleted-file.dart');
-            
+
             assert.strictEqual(handleFileDeletedCalled, true, 'Should handle file deletion');
         });
 
@@ -280,8 +320,80 @@ suite('AnalyzerOrchestrator Unit Tests', () => {
 
             // Should not throw
             await orchestrator.handleFileDeleted('/test/file.dart');
-            
+
             assert.ok(true, 'Should handle deletion errors gracefully');
+        });
+    });
+
+    suite('Unused Method Reanalysis', () => {
+        test('should enqueue reanalysis for each cached file once', async () => {
+            const fileA = '/test/a.dart';
+            const fileB = '/test/b.dart';
+            cachedMethods = [
+                {
+                    name: 'alpha',
+                    filePath: fileA,
+                    range: new vscode.Range(new vscode.Position(0, 0), new vscode.Position(0, 1)),
+                    isPrivate: false
+                },
+                {
+                    name: 'beta',
+                    filePath: fileB,
+                    range: new vscode.Range(new vscode.Position(1, 0), new vscode.Position(1, 1)),
+                    isPrivate: false
+                },
+                {
+                    name: 'gamma',
+                    filePath: fileB,
+                    range: new vscode.Range(new vscode.Position(2, 0), new vscode.Position(2, 1)),
+                    isPrivate: false
+                }
+            ];
+
+            const reanalysisCalls: Array<{ filePath: string; methodNames: string[] }> = [];
+            mockIncrementalHandler.reanalyzeCachedMethods = async (filePath: string, methods: any[]) => {
+                reanalysisCalls.push({
+                    filePath,
+                    methodNames: methods.map((method: any) => method.name).sort()
+                });
+            };
+
+            mockConfigService.getConfiguration = () => ({
+                enabled: true,
+                sourceDirectory: 'lib',
+                excludePatterns: [],
+                severity: vscode.DiagnosticSeverity.Warning,
+                maxConcurrency: 5,
+                incrementalAnalysis: true,
+                analysisDelay: 2000,
+                unusedCodeReanalysisIntervalMinutes: 1
+            });
+
+            await (orchestrator as any).enqueueUnusedMethodReanalysis();
+
+            reanalysisCalls.sort((a, b) => a.filePath.localeCompare(b.filePath));
+            assert.deepStrictEqual(reanalysisCalls, [
+                { filePath: fileA, methodNames: ['alpha'] },
+                { filePath: fileB, methodNames: ['beta', 'gamma'] }
+            ], 'Should reanalyze cached methods per file once');
+        });
+    });
+
+    suite('Configuration Changes', () => {
+        test('should clear diagnostics when disabled via configuration change', () => {
+            let clearCalled = 0;
+            mockDiagnostics.clear = () => {
+                clearCalled++;
+            };
+
+            currentConfig = {
+                ...currentConfig,
+                enabled: false
+            };
+
+            (orchestrator as any).handleConfigurationChange(currentConfig);
+
+            assert.ok(clearCalled > 0, 'Should clear diagnostics when analyzer is disabled');
         });
     });
 

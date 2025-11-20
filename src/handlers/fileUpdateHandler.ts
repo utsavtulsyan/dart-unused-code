@@ -1,12 +1,12 @@
 import * as vscode from 'vscode';
-import { CacheService } from '../services/cacheService';
+import { CacheService, AnalysisMetrics } from '../services';
 import { Diagnostics, Workspace } from '../infra';
 import { DependencyTrackerService } from '../services/dependencyTrackerService';
 import { MethodAnalyzer } from '../core/methodAnalyzer';
 import { DependencyDiscovery } from '../core/dependencyDiscovery';
 import { VscodeCommands } from '../infra/vscodeCommands';
 import { FileSystemUtils } from '../shared/utils/fileSystemUtils';
-import { Logger } from '../shared/types';
+import { Logger, MethodInfo, AnalyzerConfig } from '../shared/types';
 
 /**
  * Handles file update (save) events with full incremental analysis.
@@ -21,14 +21,14 @@ export class FileUpdateHandler {
         private readonly dependencyDiscovery: DependencyDiscovery,
         private readonly diagnostics: Diagnostics,
         private readonly logger: Logger
-    ) {}
+    ) { }
 
     async handle(
         filePath: string,
         excludePatterns: string[],
         workspacePath: string,
-        config: any,
-        metrics?: any
+        config: AnalyzerConfig,
+        metrics?: AnalysisMetrics
     ): Promise<void> {
         // Check if file should be excluded (safety check)
         if (FileSystemUtils.shouldExclude(filePath, workspacePath, excludePatterns)) {
@@ -36,21 +36,21 @@ export class FileUpdateHandler {
         }
 
         const startTime = Date.now();
-        
+
         try {
             // Load and process the document
             const document = await Workspace.loadDocument(filePath);
 
             // Find file dependencies
             const currentReferences = await this.dependencyDiscovery.findFileDependencies(
-                document, 
+                document,
                 workspacePath
             );
 
             // Track removed references
             const removedReferences = this.dependencyTracker.findRemovedReferences(filePath, currentReferences);
             this.dependencyTracker.setDependencies(filePath, currentReferences);
-            
+
             const allFilesToReanalyze = new Set([...currentReferences, ...removedReferences]);
 
             // Analyze the saved file
@@ -74,12 +74,12 @@ export class FileUpdateHandler {
                 if (referencedFilePath === filePath) {
                     continue;
                 }
-                
+
                 // Skip excluded files
                 if (FileSystemUtils.shouldExclude(referencedFilePath, workspacePath, excludePatterns)) {
                     continue;
                 }
-                
+
                 const referencedResult = await this.methodAnalyzer.analyzeMethodsInFile(
                     referencedFilePath,
                     excludePatterns,
@@ -87,7 +87,7 @@ export class FileUpdateHandler {
                     config
                 );
                 this.cache.updateFile(referencedFilePath, referencedResult.unused);
-                
+
                 if (metrics) {
                     metrics.methodsUnused += referencedResult.unused.length;
                     metrics.methodsUsed += referencedResult.analyzed - referencedResult.unused.length;
@@ -98,6 +98,45 @@ export class FileUpdateHandler {
             this.logger.debug(` ${metrics?.filesAnalyzed || 0} files, ${metrics?.methodsUnused || 0} unused (${duration}ms)`);
         } catch (error) {
             this.logger.error(` ${error}`);
+        }
+    }
+
+    async reanalyzeCachedMethods(
+        filePath: string,
+        methods: MethodInfo[],
+        excludePatterns: string[],
+        workspacePath: string,
+        config: AnalyzerConfig,
+        metrics?: AnalysisMetrics
+    ): Promise<void> {
+        if (FileSystemUtils.shouldExclude(filePath, workspacePath, excludePatterns)) {
+            return;
+        }
+
+        const startTime = Date.now();
+
+        try {
+            const stillUnused = await this.methodAnalyzer.reanalyzeCachedMethods(
+                filePath,
+                methods,
+                excludePatterns,
+                workspacePath,
+                config
+            );
+
+            this.cache.updateFile(filePath, stillUnused);
+
+            if (metrics) {
+                metrics.filesAnalyzed = 1;
+                metrics.methodsUnused = stillUnused.length;
+                metrics.methodsUsed = methods.length - stillUnused.length;
+            }
+
+            const duration = Date.now() - startTime;
+            this.logger.debug(` Reanalyzed ${filePath}: ${stillUnused.length} unused (${duration}ms)`);
+        } catch (error) {
+            this.logger.error(` ${error}`);
+            throw error;
         }
     }
 }

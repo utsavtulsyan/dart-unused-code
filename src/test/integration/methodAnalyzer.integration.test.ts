@@ -111,11 +111,13 @@ void main() {
 
         const config = {
             enabled: true,
-            excludePatterns: [],
+            sourceDirectory: 'lib',
+            excludePatterns: ['**/*_test.dart'],
             severity: vscode.DiagnosticSeverity.Warning,
             maxConcurrency: 5,
-            analyzeOnSave: true,
-            analysisDelay: 500
+            incrementalAnalysis: true,
+            analysisDelay: 500,
+            unusedCodeReanalysisIntervalMinutes: 0
         };
 
         const result = await methodAnalyzer.analyzeMethodsInFile(
@@ -139,11 +141,13 @@ void main() {
 
         const config = {
             enabled: true,
+            sourceDirectory: 'lib',
             excludePatterns: [],
             severity: vscode.DiagnosticSeverity.Warning,
             maxConcurrency: 5,
-            analyzeOnSave: true,
-            analysisDelay: 500
+            incrementalAnalysis: true,
+            analysisDelay: 500,
+            unusedCodeReanalysisIntervalMinutes: 0
         };
 
         // Analyze to create diagnostics

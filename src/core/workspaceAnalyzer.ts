@@ -7,7 +7,7 @@ import { CacheService } from '../services/cacheService';
 import { MetricsService } from '../services/metricsService';
 import { DependencyTrackerService } from '../services/dependencyTrackerService';
 import { DependencyDiscovery } from './dependencyDiscovery';
-import { MethodInfo, Logger } from '../shared/types';
+import { MethodInfo, Logger, AnalyzerConfig } from '../shared/types';
 import { ParallelProcessor } from '../shared/utils/parallelProcessor';
 import { FileSystemUtils } from '../shared/utils/fileSystemUtils';
 
@@ -25,11 +25,11 @@ export class WorkspaceAnalyzer {
         private readonly dependencyTracker: DependencyTrackerService,
         private readonly dependencyDiscovery: DependencyDiscovery,
         private readonly logger: Logger
-    ) {}
+    ) { }
 
-    async analyze(workspacePath: string, config: any): Promise<number> {
+    async analyze(workspacePath: string, config: AnalyzerConfig): Promise<number> {
         const analysisMetrics = this.metrics.startAnalysis(false);
-        
+
         try {
             this.logger.info(`Starting full workspace analysis`);
 
@@ -70,7 +70,7 @@ export class WorkspaceAnalyzer {
                 config.maxConcurrency,
                 config
             );
-            
+
             analysisMetrics.methodsUnused = unusedMethods.length;
             analysisMetrics.methodsUsed = publicMethods.length - unusedMethods.length;
 
@@ -90,7 +90,7 @@ export class WorkspaceAnalyzer {
     private async loadFilesForAnalysis(dartFiles: string[]): Promise<void> {
         const batchSize = 50;
         const batches: string[][] = [];
-        
+
         for (let i = 0; i < dartFiles.length; i += batchSize) {
             batches.push(dartFiles.slice(i, i + batchSize));
         }
@@ -105,10 +105,10 @@ export class WorkspaceAnalyzer {
                     this.logger.warn(` Could not load ${filePath}: ${error}`);
                 }
             });
-            
+
             await Promise.all(loadPromises);
             filesLoaded += batch.length;
-            
+
             // Report progress after each batch
             StatusBar.updateProgress({
                 current: filesLoaded,
@@ -117,20 +117,20 @@ export class WorkspaceAnalyzer {
                 details: `${dartFiles.length} files`
             });
         }
-        
+
         const waitTime = Math.min(5000, dartFiles.length * 10);
         this.logger.debug(`Waiting ${waitTime}ms for indexing to complete...`);
         await new Promise(resolve => setTimeout(resolve, waitTime));
     }
 
     private async buildDependencyMap(
-        dartFiles: string[], 
-        workspacePath: string, 
+        dartFiles: string[],
+        workspacePath: string,
         excludePatterns: string[]
     ): Promise<void> {
         this.dependencyTracker.clear();
         const maxConcurrency = Math.min(5, dartFiles.length);
-        
+
         await ParallelProcessor.processWithConcurrencyAndIndex(
             dartFiles,
             async (filePath: string) => {
@@ -138,7 +138,7 @@ export class WorkspaceAnalyzer {
                     const uri = vscode.Uri.file(filePath);
                     const document = await vscode.workspace.openTextDocument(uri);
                     const dependencies = await this.dependencyDiscovery.findFileDependencies(document, workspacePath);
-                    const filteredDependencies = Array.from(dependencies).filter(depPath => 
+                    const filteredDependencies = Array.from(dependencies).filter(depPath =>
                         !FileSystemUtils.shouldExclude(depPath, workspacePath, excludePatterns)
                     );
                     this.dependencyTracker.setDependencies(filePath, new Set(filteredDependencies));
@@ -160,7 +160,7 @@ export class WorkspaceAnalyzer {
 
     private async extractPublicMethods(dartFiles: string[], maxConcurrency: number): Promise<MethodInfo[]> {
         const concurrency = Math.min(maxConcurrency || 5, dartFiles.length);
-        
+
         const allMethodArrays = await ParallelProcessor.processWithConcurrencyAndIndex(
             dartFiles,
             async (file: string) => {
@@ -182,20 +182,20 @@ export class WorkspaceAnalyzer {
     }
 
     private async findUnusedMethods(
-        methods: MethodInfo[], 
-        excludePatterns: string[], 
+        methods: MethodInfo[],
+        excludePatterns: string[],
         workspacePath: string,
         maxConcurrency: number,
-        config: any
+        config: AnalyzerConfig
     ): Promise<MethodInfo[]> {
         const concurrency = Math.min(maxConcurrency || 5, methods.length);
-        
+
         const results = await ParallelProcessor.processWithConcurrencyAndIndex(
             methods,
             async (method: MethodInfo) => {
                 const isUnused = await this.referenceAnalyzer.isMethodUnused(
-                    method, 
-                    excludePatterns, 
+                    method,
+                    excludePatterns,
                     workspacePath
                 );
 

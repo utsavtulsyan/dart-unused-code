@@ -5,7 +5,7 @@ import { Diagnostics, Workspace } from '../infra';
 import { DependencyTrackerService } from '../services/dependencyTrackerService';
 import { MethodAnalyzer } from '../core/methodAnalyzer';
 import { DependencyDiscovery } from '../core/dependencyDiscovery';
-import { MethodInfo, Logger } from '../shared/types';
+import { MethodInfo, Logger, AnalyzerConfig } from '../shared/types';
 import { VscodeCommands } from '../infra/vscodeCommands';
 import { DartPackageUtils } from '../shared/utils/dartPackageUtils';
 import { FileSystemUtils } from '../shared/utils/fileSystemUtils';
@@ -23,13 +23,13 @@ export class FileCreationHandler {
         private readonly dependencyDiscovery: DependencyDiscovery,
         private readonly diagnostics: Diagnostics,
         private readonly logger: Logger
-    ) {}
+    ) { }
 
     async handle(
         createdFilePath: string,
         excludePatterns: string[],
         workspacePath: string,
-        config: any
+        config: AnalyzerConfig
     ): Promise<void> {
         // Check if file should be excluded
         if (FileSystemUtils.shouldExclude(createdFilePath, workspacePath, excludePatterns)) {
@@ -38,7 +38,7 @@ export class FileCreationHandler {
         }
 
         this.logger.debug(`New file created: ${createdFilePath}`);
-        
+
         try {
             // Load file and find references
             const uri = vscode.Uri.file(createdFilePath);
@@ -72,7 +72,7 @@ export class FileCreationHandler {
                 if (cachedMethod) {
                     this.logger.debug(`Removing now-used method from cache: ${cachedMethod.name} at ${methodDef.filePath}:${methodDef.line}`);
                     this.cache.remove(cachedMethod);
-                    
+
                     // Update diagnostics for that file
                     const remainingUnused = this.cache.getForFile(methodDef.filePath);
                     if (remainingUnused.length === 0) {
@@ -105,7 +105,7 @@ export class FileCreationHandler {
     ): Promise<Array<{ filePath: string; line: number }>> {
         const definitions: Array<{ filePath: string; line: number }> = [];
         const seenDefinitions = new Set<string>();
-        
+
         try {
             const legend = await this.vscodeCommands.getSemanticTokensLegend(document.uri);
             const semanticTokens = await this.vscodeCommands.getSemanticTokens(document.uri);
@@ -164,12 +164,12 @@ export class FileCreationHandler {
                         if (defs && defs.length > 0) {
                             for (const def of defs) {
                                 const { filePath: defPath, line: defLine } = this.vscodeCommands.extractDefinitionLocation(def);
-                                
+
                                 // Skip same file, external packages, and different packages
                                 if (defPath === document.uri.fsPath) {
                                     continue;
                                 }
-                                
+
                                 // Normalize path separators for consistent checks across platforms
                                 const normalizedDefPath = defPath.split(path.sep).join('/');
                                 if (normalizedDefPath.includes('.pub-cache') || normalizedDefPath.includes('/.dart_tool/')) {
@@ -179,7 +179,7 @@ export class FileCreationHandler {
                                 // Only track definitions from the same package
                                 if (DartPackageUtils.isInSamePackage(document.uri.fsPath, defPath)) {
                                     const defKey = `${defPath}:${defLine}`;
-                                    
+
                                     if (!seenDefinitions.has(defKey)) {
                                         seenDefinitions.add(defKey);
                                         definitions.push({ filePath: defPath, line: defLine });

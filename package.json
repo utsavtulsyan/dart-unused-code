@@ -144,10 +144,10 @@
           ],
           "description": "Set the logging level for the extension output"
         },
-        "dartUnusedCode.analyzeOnSave": {
+        "dartUnusedCode.incrementalAnalysis": {
           "type": "boolean",
           "default": true,
-          "description": "Automatically analyze files when saved"
+          "description": "Automatically analyze files when changed"
         },
         "dartUnusedCode.analysisDelay": {
           "type": "number",
@@ -155,6 +155,13 @@
           "minimum": 0,
           "maximum": 900000,
           "description": "Delay in milliseconds before starting initial analysis (allows Dart Analysis Server to complete indexing)"
+        },
+        "dartUnusedCode.unusedCodeReanalysisIntervalMinutes": {
+          "type": "number",
+          "default": 3,
+          "minimum": 0,
+          "maximum": 1440,
+          "description": "Minutes between automatic reanalysis of files containing unused methods (set to 0 to disable)"
         }
       }
     }

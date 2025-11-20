@@ -12,12 +12,12 @@ suite('ConfigurationService Unit Tests', () => {
     suite('Configuration Reading', () => {
         test('should read current configuration', () => {
             const config = configService.getConfiguration();
-            
+
             assert.strictEqual(typeof config.enabled, 'boolean');
             assert.ok(Array.isArray(config.excludePatterns));
             assert.strictEqual(typeof config.severity, 'number');
             assert.strictEqual(typeof config.maxConcurrency, 'number');
-            assert.strictEqual(typeof config.analyzeOnSave, 'boolean');
+            assert.strictEqual(typeof config.incrementalAnalysis, 'boolean');
         });
 
         test('should have default enabled value', () => {
@@ -60,7 +60,7 @@ suite('ConfigurationService Unit Tests', () => {
         test('should include generated file patterns', () => {
             const config = configService.getConfiguration();
             const patterns = config.excludePatterns;
-            
+
             assert.ok(patterns.includes('**/*.g.dart'));
             assert.ok(patterns.includes('**/*.freezed.dart'));
             assert.ok(patterns.includes('**/*.gr.dart'));
@@ -69,14 +69,14 @@ suite('ConfigurationService Unit Tests', () => {
         test('should include test file patterns', () => {
             const config = configService.getConfiguration();
             const patterns = config.excludePatterns;
-            
+
             assert.ok(patterns.some(p => p.includes('test')));
         });
 
         test('should include build directories', () => {
             const config = configService.getConfiguration();
             const patterns = config.excludePatterns;
-            
+
             assert.ok(patterns.some(p => p.includes('build')));
             assert.ok(patterns.some(p => p.includes('.dart_tool')));
         });

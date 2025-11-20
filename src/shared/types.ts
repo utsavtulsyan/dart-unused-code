@@ -26,8 +26,9 @@ export interface AnalyzerConfig {
     excludePatterns: string[];
     severity: vscode.DiagnosticSeverity;
     maxConcurrency: number;
-    analyzeOnSave: boolean;
+    incrementalAnalysis: boolean;
     analysisDelay: number;
+    unusedCodeReanalysisIntervalMinutes: number;
 }
 
 /**

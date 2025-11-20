@@ -81,8 +81,8 @@ suite('Extension Integration Tests', () => {
             assert.strictEqual(typeof config.get('enabled'), 'boolean');
             assert.ok(Array.isArray(config.get('excludePatterns')));
             assert.strictEqual(typeof config.get('severity'), 'string');
-            assert.strictEqual(typeof config.get('maxConcurrency'), 'number');
-            assert.strictEqual(typeof config.get('analyzeOnSave'), 'boolean');
+            assert.strictEqual(typeof config.get('analysisDelay'), 'number');
+            assert.strictEqual(typeof config.get('incrementalAnalysis'), 'boolean');
         });
 
         test('should have default configuration values', () => {
@@ -90,7 +90,7 @@ suite('Extension Integration Tests', () => {
 
             assert.strictEqual(config.get('enabled'), true);
             assert.strictEqual(config.get('severity'), 'Warning');
-            assert.strictEqual(config.get('analyzeOnSave'), true);
+            assert.strictEqual(config.get('incrementalAnalysis'), true);
         });
 
         test('should respect exclude patterns configuration', () => {

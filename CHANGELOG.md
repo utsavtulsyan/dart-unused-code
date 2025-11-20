@@ -2,6 +2,14 @@
 
 Format: [Keep a Changelog](https://keepachangelog.com/) | Versioning: [Semantic Versioning](https://semver.org/)
 
+## Unreleased
+### Added
+- periodic reanalysis of unused methods, this improved false positives due to race condition
+- config change listener, this updates the runtime with the changes in configuration
+
+### Changed
+- rename analysisOnSave to incrementalAnalysis
+
 ## [1.1.0] (Prerelease) & [1.2.0] (Release) - 2025-11-18
 
 ### Added

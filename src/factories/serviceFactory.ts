@@ -71,6 +71,9 @@ export class ServiceFactory {
             loggingService.createChild('DepDiscovery'),
             config.sourceDirectory
         );
+        this.configService.onDidChangeConfiguration((updatedConfig) => {
+            this.dependencyDiscovery.updateSourceDirectory(updatedConfig.sourceDirectory);
+        });
         this.methodAnalyzer = new MethodAnalyzer(
             this.methodExtractor,
             this.referenceAnalyzer,
@@ -135,6 +138,7 @@ export class ServiceFactory {
             this.incrementalAnalysisHandler,
             this.configService,
             this.diagnostics,
+            this.cache,
             loggingService.createChild('Orchestrator')
         );
     }

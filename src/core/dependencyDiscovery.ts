@@ -15,8 +15,17 @@ import { Logger } from '../shared/types';
 export class DependencyDiscovery {
     constructor(
         private readonly logger: Logger,
-        private readonly sourceDirectory: string = 'lib'
-    ) {}
+        private sourceDirectory: string = 'lib'
+    ) { }
+
+    updateSourceDirectory(sourceDirectory: string): void {
+        if (sourceDirectory === this.sourceDirectory) {
+            return;
+        }
+
+        this.logger.debug(`[DEP_DISCOVERY] Source directory updated from ${this.sourceDirectory} to ${sourceDirectory}`);
+        this.sourceDirectory = sourceDirectory;
+    }
 
     /**
      * Quickly finds file dependencies by analyzing import statements.
@@ -28,19 +37,19 @@ export class DependencyDiscovery {
     ): Promise<Set<string>> {
         const dependencies = new Set<string>();
         const documentDir = path.dirname(document.uri.fsPath);
-        
+
         try {
             // Scan only the first ~100 lines where imports typically appear
             const maxLinesToScan = Math.min(100, document.lineCount);
-            
+
             for (let i = 0; i < maxLinesToScan; i++) {
                 const line = document.lineAt(i).text.trim();
-                
+
                 // Stop at first non-import, non-comment, non-empty line after imports started
-                if (line && 
-                    !line.startsWith('import ') && 
+                if (line &&
+                    !line.startsWith('import ') &&
                     !line.startsWith('export ') &&
-                    !line.startsWith('//') && 
+                    !line.startsWith('//') &&
                     !line.startsWith('/*') &&
                     !line.startsWith('*') &&
                     !line.startsWith('library ') &&
@@ -48,23 +57,23 @@ export class DependencyDiscovery {
                     dependencies.size > 0) {
                     break;
                 }
-                
+
                 const importMatch = this.parseImportStatement(line);
                 if (!importMatch) {
                     continue;
                 }
-                
+
                 const { importPath, isRelative } = importMatch;
-                
+
                 // Skip external packages (dart:, package: from other packages)
                 if (importPath.startsWith('dart:')) {
                     continue;
                 }
-                
+
                 if (importPath.startsWith('package:')) {
                     // Check if it's from the same package
                     const resolvedPath = await this.resolvePackageImport(
-                        importPath, 
+                        importPath,
                         workspacePath,
                         document.uri.fsPath
                     );
@@ -73,7 +82,7 @@ export class DependencyDiscovery {
                     }
                     continue;
                 }
-                
+
                 // Handle relative imports
                 if (isRelative) {
                     const resolvedPath = this.resolveRelativeImport(importPath, documentDir);
@@ -82,13 +91,13 @@ export class DependencyDiscovery {
                     }
                 }
             }
-            
+
             this.logger.trace(`Found ${dependencies.size} file dependencies in ${document.uri.fsPath}`);
-            
+
         } catch (error) {
             this.logger.error(`Error finding dependencies: ${error}`);
         }
-        
+
         return dependencies;
     }
 
@@ -103,10 +112,10 @@ export class DependencyDiscovery {
         if (!match) {
             return null;
         }
-        
+
         const importPath = match[1];
         const isRelative = !importPath.startsWith('dart:') && !importPath.startsWith('package:');
-        
+
         return { importPath, isRelative };
     }
 
@@ -117,19 +126,19 @@ export class DependencyDiscovery {
         try {
             // Remove any query parameters or fragments
             const cleanPath = importPath.split('?')[0].split('#')[0];
-            
+
             // Convert forward slashes to platform-specific separators
             const platformPath = cleanPath.split('/').join(path.sep);
-            
+
             // Join with document directory and normalize
             let resolvedPath = path.join(documentDir, platformPath);
             resolvedPath = path.normalize(resolvedPath);
-            
+
             // Add .dart extension if not present
             if (!resolvedPath.endsWith('.dart')) {
                 resolvedPath += '.dart';
             }
-            
+
             return resolvedPath;
         } catch (error) {
             this.logger.error(`Error resolving relative import ${importPath}: ${error}`);
@@ -142,7 +151,7 @@ export class DependencyDiscovery {
      * Example: package:myapp/models/user.dart -> /path/to/project/lib/models/user.dart
      */
     private async resolvePackageImport(
-        importPath: string, 
+        importPath: string,
         workspacePath: string,
         currentFilePath: string
     ): Promise<string | null> {
@@ -153,28 +162,28 @@ export class DependencyDiscovery {
             if (!match) {
                 return null;
             }
-            
+
             const [, packageName, relativePath] = match;
-            
+
             // Get the current file's package name
             const currentPackageName = await this.getPackageName(workspacePath);
-            
+
             // Only resolve if it's the same package
             if (packageName !== currentPackageName) {
                 return null;
             }
-            
+
             // Convert forward slashes to platform-specific separators
             const platformRelativePath = relativePath.split('/').join(path.sep);
-            
+
             // Convert to source directory path using path.join for cross-platform compatibility
             let resolvedPath = path.join(workspacePath, this.sourceDirectory, platformRelativePath);
-            
+
             // Add .dart extension if not present
             if (!resolvedPath.endsWith('.dart')) {
                 resolvedPath += '.dart';
             }
-            
+
             return resolvedPath;
         } catch (error) {
             this.logger.error(`Error resolving package import ${importPath}: ${error}`);
@@ -190,7 +199,7 @@ export class DependencyDiscovery {
             const pubspecPath = path.join(workspacePath, 'pubspec.yaml');
             const uri = vscode.Uri.file(pubspecPath);
             const document = await vscode.workspace.openTextDocument(uri);
-            
+
             for (let i = 0; i < Math.min(50, document.lineCount); i++) {
                 const line = document.lineAt(i).text;
                 const match = line.match(/^name:\s*(.+)$/);
@@ -198,7 +207,7 @@ export class DependencyDiscovery {
                     return match[1].trim();
                 }
             }
-            
+
             return null;
         } catch (error) {
             this.logger.error(`Error reading pubspec.yaml: ${error}`);

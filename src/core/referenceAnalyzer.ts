@@ -12,24 +12,24 @@ export class ReferenceAnalyzer {
     constructor(
         private readonly vscodeCommands: VscodeCommands,
         private readonly logger: Logger
-    ) {}
+    ) { }
 
     /**
      * Determines if a method is unused by checking its references.
      * A method is unused if it has <= 1 reference (only the definition).
      */
     async isMethodUnused(
-        method: MethodInfo, 
-        excludePatterns: string[], 
+        method: MethodInfo,
+        excludePatterns: string[],
         workspacePath: string
     ): Promise<boolean> {
         try {
-            const methodIdentifier = method.className 
+            const methodIdentifier = method.className
                 ? `${method.className}.${method.name}:${method.range.start.line}`
                 : `${method.name}:${method.range.start.line}`;
 
             const references = await this.findReferences(method);
-            
+
             if (references.length === 0) {
                 this.logger.trace(` ${methodIdentifier}: No references found`);
                 return true;
@@ -49,20 +49,20 @@ export class ReferenceAnalyzer {
 
             const filteredReferences = this.filterExcludedReferences(
                 references,
-                excludePatterns, 
+                excludePatterns,
                 workspacePath,
                 methodIdentifier
-            );            this.logger.trace(` ${methodIdentifier}: ${filteredReferences.length} non-excluded references`);
+            ); this.logger.trace(` ${methodIdentifier}: ${filteredReferences.length} non-excluded references`);
 
             // Separate definition from actual usage references
             // Convert method.filePath to URI and use fsPath for consistent cross-platform comparison
             // This ensures both paths go through the same normalization process
             const methodFsPath = vscode.Uri.file(method.filePath).fsPath;
-            const definitionReferences = filteredReferences.filter(ref => 
-                ref.uri.fsPath === methodFsPath && 
+            const definitionReferences = filteredReferences.filter(ref =>
+                ref.uri.fsPath === methodFsPath &&
                 ref.range.start.line === method.range.start.line
             );
-            const usageReferences = filteredReferences.filter(ref => 
+            const usageReferences = filteredReferences.filter(ref =>
                 !(ref.uri.fsPath === methodFsPath && ref.range.start.line === method.range.start.line)
             );
 
@@ -77,7 +77,14 @@ export class ReferenceAnalyzer {
 
             return isUnused;
         } catch (error) {
-            this.logger.trace(` Error analyzing ${method.name}: ${error}`);
+            const methodIdentifier = method.className
+                ? `${method.className}.${method.name}:${method.range.start.line}`
+                : `${method.name}:${method.range.start.line}`;
+
+            this.logger.error(
+                `[REFERENCE_ANALYZER] Error analyzing ${methodIdentifier} at ${method.filePath}: ${error instanceof Error ? error.message : String(error)}`
+            );
+
             // If we can't analyze, assume it's used (fail-safe)
             return false;
         }
@@ -87,7 +94,7 @@ export class ReferenceAnalyzer {
         const uri = vscode.Uri.file(method.filePath);
         const position = method.range.start;
 
-        const methodIdentifier = method.className 
+        const methodIdentifier = method.className
             ? `${method.className}.${method.name}:${method.range.start.line}`
             : `${method.name}:${method.range.start.line}`;
 
@@ -103,7 +110,7 @@ export class ReferenceAnalyzer {
         if (!locations || locations.length <= 1) {
             this.logger.trace(` ${methodIdentifier}: ${locations?.length || 0} results found, retrying with 500ms delay for full indexing...`);
             await new Promise(resolve => setTimeout(resolve, 500));
-            
+
             locations = await this.vscodeCommands.getReferences(uri, position);
             this.logger.trace(` ${methodIdentifier}: Retry returned ${locations?.length || 0} results`);
         }
@@ -112,8 +119,8 @@ export class ReferenceAnalyzer {
     }
 
     private filterExcludedReferences(
-        references: vscode.Location[], 
-        excludePatterns: string[], 
+        references: vscode.Location[],
+        excludePatterns: string[],
         workspacePath: string,
         methodName: string
     ): vscode.Location[] {
@@ -122,12 +129,12 @@ export class ReferenceAnalyzer {
             // Convert to forward slashes for consistent glob matching across platforms
             const normalizedPath = relativePath.split(path.sep).join('/');
             const matchedPattern = this.getMatchedPattern(normalizedPath, excludePatterns);
-            
+
             if (matchedPattern) {
                 this.logger.trace(`  [EXCLUDED] ${methodName} -> ${normalizedPath} (matched pattern: "${matchedPattern}")`);
                 return false;
             }
-            
+
             return true;
         });
     }

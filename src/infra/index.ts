@@ -6,3 +6,4 @@ export { Diagnostics } from './diagnostics';
 export { Workspace } from './workspace';
 export { StatusBar, ProgressInfo } from './statusBar';
 export { Notifications } from './notifications';
+export { FileSystemProvider } from './fileSystemProvider';

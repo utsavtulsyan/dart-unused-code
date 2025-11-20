@@ -150,7 +150,7 @@ suite('Workspace Analysis Integration Tests', () => {
         // Verify default settings
         assert.strictEqual(config.get('enabled'), true, 'Should be enabled by default');
         assert.strictEqual(config.get('severity'), 'Warning', 'Should use Warning severity by default');
-        assert.strictEqual(config.get('analyzeOnSave'), true, 'Should analyze on save by default');
+        assert.strictEqual(config.get('incrementalAnalysis'), true, 'Should analyze on save by default');
 
         const excludePatterns = config.get<string[]>('excludePatterns') || [];
         assert.ok(excludePatterns.includes('**/*.g.dart'), 'Should exclude generated files');

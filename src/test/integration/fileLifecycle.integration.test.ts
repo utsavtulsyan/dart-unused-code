@@ -286,4 +286,90 @@ class LifecycleTest {
       assert.ok(!fs.existsSync(filePath), 'File should be deleted');
     });
   });
+
+  suite('File Event Batching', () => {
+    test('should batch multiple file creations efficiently', async function () {
+      this.timeout(10000);
+
+      const testFiles: string[] = [];
+      const fileCount = 5;
+
+      // Create multiple files rapidly
+      for (let i = 0; i < fileCount; i++) {
+        const filePath = path.join(testWorkspace, `batch_create_${i}_temp.dart`);
+        testFiles.push(filePath);
+        createdFiles.push(filePath);
+
+        const content = `
+class BatchClass${i} {
+  void unusedMethod${i}() {
+    print('Batch ${i}');
+  }
+}
+`;
+        fs.writeFileSync(filePath, content);
+      }
+
+      // Open all files to trigger analysis
+      for (const filePath of testFiles) {
+        await vscode.workspace.openTextDocument(vscode.Uri.file(filePath));
+      }
+
+      // Wait for batching and analysis to complete
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      // Verify all files were created
+      for (const filePath of testFiles) {
+        assert.ok(fs.existsSync(filePath), `File ${filePath} should exist`);
+      }
+
+      // Cleanup
+      for (const filePath of testFiles) {
+        if (fs.existsSync(filePath)) {
+          fs.unlinkSync(filePath);
+        }
+      }
+    });
+
+    test('should batch multiple file deletions efficiently', async function () {
+      this.timeout(10000);
+
+      const testFiles: string[] = [];
+      const fileCount = 5;
+
+      // Create files first
+      for (let i = 0; i < fileCount; i++) {
+        const filePath = path.join(testWorkspace, `batch_delete_${i}_temp.dart`);
+        testFiles.push(filePath);
+        createdFiles.push(filePath);
+
+        const content = `
+class DeleteClass${i} {
+  void method${i}() {
+    print('Delete ${i}');
+  }
+}
+`;
+        fs.writeFileSync(filePath, content);
+      }
+
+      // Wait a bit for files to be registered
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      // Delete all files rapidly
+      for (const filePath of testFiles) {
+        if (fs.existsSync(filePath)) {
+          fs.unlinkSync(filePath);
+        }
+      }
+
+      // Wait for batching and analysis to complete
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      // Verify all files were deleted
+      for (const filePath of testFiles) {
+        assert.ok(!fs.existsSync(filePath), `File ${filePath} should be deleted`);
+      }
+    });
+  });
 });

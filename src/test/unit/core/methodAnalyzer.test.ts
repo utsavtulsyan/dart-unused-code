@@ -4,7 +4,7 @@ import { MethodAnalyzer } from '../../../core/methodAnalyzer';
 import { MethodExtractor } from '../../../core/methodExtractor';
 import { ReferenceAnalyzer } from '../../../core/referenceAnalyzer';
 import { Diagnostics } from '../../../infra/diagnostics';
-import { MethodInfo } from '../../../shared/types';
+import { MethodInfo, AnalyzerConfig } from '../../../shared/types';
 import { createMockLogger } from '../../helpers/mockLogger';
 
 suite('MethodAnalyzer Unit Tests', () => {
@@ -13,6 +13,7 @@ suite('MethodAnalyzer Unit Tests', () => {
     let mockReferenceAnalyzer: ReferenceAnalyzer;
     let mockDiagnostics: Diagnostics;
     let mockLogger: ReturnType<typeof createMockLogger>;
+    let mockConfig: AnalyzerConfig;
 
     setup(() => {
         mockLogger = createMockLogger();
@@ -26,9 +27,20 @@ suite('MethodAnalyzer Unit Tests', () => {
         } as any;
 
         mockDiagnostics = {
-            clearFile: () => {},
-            reportUnusedMethod: () => {}
+            clearFile: () => { },
+            reportUnusedMethod: () => { }
         } as any;
+
+        mockConfig = {
+            enabled: true,
+            sourceDirectory: 'lib',
+            excludePatterns: [],
+            severity: vscode.DiagnosticSeverity.Warning,
+            maxConcurrency: 5,
+            incrementalAnalysis: true,
+            analysisDelay: 2000,
+            unusedCodeReanalysisIntervalMinutes: 0
+        };
 
         methodAnalyzer = new MethodAnalyzer(
             mockMethodExtractor,
@@ -46,7 +58,7 @@ suite('MethodAnalyzer Unit Tests', () => {
                 '/test/file.dart',
                 [],
                 '/workspace',
-                { severity: vscode.DiagnosticSeverity.Warning }
+                mockConfig
             );
 
             assert.strictEqual(result.analyzed, 0, 'Should analyze 0 methods');
@@ -76,7 +88,7 @@ suite('MethodAnalyzer Unit Tests', () => {
                 '/test/file.dart',
                 [],
                 '/workspace',
-                { severity: vscode.DiagnosticSeverity.Warning }
+                mockConfig
             );
 
             assert.strictEqual(result.analyzed, 1, 'Should only analyze public methods');
@@ -105,7 +117,7 @@ suite('MethodAnalyzer Unit Tests', () => {
                 '/test/file.dart',
                 [],
                 '/workspace',
-                { severity: vscode.DiagnosticSeverity.Warning }
+                mockConfig
             );
 
             assert.strictEqual(result.analyzed, 1);
@@ -130,7 +142,7 @@ suite('MethodAnalyzer Unit Tests', () => {
                 '/test/file.dart',
                 [],
                 '/workspace',
-                { severity: vscode.DiagnosticSeverity.Warning }
+                mockConfig
             );
 
             assert.strictEqual(result.analyzed, 1);
@@ -168,7 +180,7 @@ suite('MethodAnalyzer Unit Tests', () => {
                 '/test/file.dart',
                 [],
                 '/workspace',
-                { severity: vscode.DiagnosticSeverity.Warning }
+                mockConfig
             );
 
             assert.strictEqual(result.analyzed, 3);
@@ -189,7 +201,7 @@ suite('MethodAnalyzer Unit Tests', () => {
                 '/test/file.dart',
                 [],
                 '/workspace',
-                { severity: vscode.DiagnosticSeverity.Warning }
+                mockConfig
             );
 
             assert.strictEqual(clearFileCalled, true, 'Should clear diagnostics before analysis');
@@ -218,7 +230,7 @@ suite('MethodAnalyzer Unit Tests', () => {
                 '/test/file.dart',
                 excludePatterns,
                 '/workspace',
-                { severity: vscode.DiagnosticSeverity.Warning }
+                mockConfig
             );
 
             assert.deepStrictEqual(
@@ -251,7 +263,7 @@ suite('MethodAnalyzer Unit Tests', () => {
                 '/test/file.dart',
                 [],
                 workspacePath,
-                { severity: vscode.DiagnosticSeverity.Warning }
+                mockConfig
             );
 
             assert.strictEqual(

@@ -4,7 +4,7 @@ import { FileSystemProvider } from '../../../infra/fileSystemProvider';
 import { AnalyzerOrchestrator } from '../../../analyzers/analyzerOrchestrator';
 import { createMockLogger } from '../../helpers/mockLogger';
 
-suite('Providers Unit Tests', () => {
+suite('FileSystemProvider Unit Tests', () => {
     let mockOrchestrator: AnalyzerOrchestrator;
     let mockLogger: ReturnType<typeof createMockLogger>;
 

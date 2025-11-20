@@ -1,4 +1,4 @@
-interface AnalysisMetrics {
+export interface AnalysisMetrics {
     startTime: number;
     endTime?: number;
     duration?: number;
@@ -26,21 +26,21 @@ export class MetricsService {
             methodsUnused: 0,
             isIncremental
         };
-        
+
         this.metrics.push(metrics);
-        
+
         // Keep only recent metrics
         if (this.metrics.length > this.maxHistorySize) {
             this.metrics = this.metrics.slice(-this.maxHistorySize);
         }
-        
+
         return metrics;
     }
 
     finishAnalysis(metrics: AnalysisMetrics): void {
         metrics.endTime = Date.now();
         metrics.duration = metrics.endTime - metrics.startTime;
-        
+
         if (metrics.isIncremental) {
             this.lastIncrementalAnalysis = metrics;
         } else {
@@ -49,29 +49,29 @@ export class MetricsService {
     }
 
     private formatDuration(durationMs: number): string {
-        return durationMs < 1000 
+        return durationMs < 1000
             ? `${durationMs.toFixed(0)}ms`
             : `${(durationMs / 1000).toFixed(2)}s`;
     }
 
     getAverageFullAnalysisTime(): number {
         const fullAnalyses = this.metrics.filter(m => !m.isIncremental && m.duration !== undefined);
-        
+
         if (fullAnalyses.length === 0) {
             return 0;
         }
-        
+
         const totalTime = fullAnalyses.reduce((sum, m) => sum + (m.duration || 0), 0);
         return totalTime / fullAnalyses.length;
     }
 
     getAverageIncrementalAnalysisTime(): number {
         const incrementalAnalyses = this.metrics.filter(m => m.isIncremental && m.duration !== undefined);
-        
+
         if (incrementalAnalyses.length === 0) {
             return 0;
         }
-        
+
         const totalTime = incrementalAnalyses.reduce((sum, m) => sum + (m.duration || 0), 0);
         return totalTime / incrementalAnalyses.length;
     }

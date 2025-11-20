@@ -75,9 +75,11 @@ suite('Infra Unit Tests', () => {
                 excludePatterns: [],
                 severity: vscode.DiagnosticSeverity.Warning,
                 maxConcurrency: 5,
-                analyzeOnSave: true,
-                analysisDelay: 500
-            };            diagnostics.reportUnusedMethodsForFile('/test/file.dart', methods, config);
+                incrementalAnalysis: true,
+                analysisDelay: 2000,
+                unusedCodeReanalysisIntervalMinutes: 0
+            };
+            diagnostics.reportUnusedMethodsForFile('/test/file.dart', methods, config);
 
             const uri = vscode.Uri.file('/test/file.dart');
             const fileDiagnostics = diagnosticCollection.get(uri);
@@ -97,8 +99,9 @@ suite('Infra Unit Tests', () => {
                 excludePatterns: [],
                 severity: vscode.DiagnosticSeverity.Warning,
                 maxConcurrency: 5,
-                analyzeOnSave: true,
-                analysisDelay: 500
+                incrementalAnalysis: true,
+                analysisDelay: 500,
+                unusedCodeReanalysisIntervalMinutes: 0
             };
             diagnostics.reportUnusedMethodsForFile('/test/file.dart', [], config);
 
@@ -121,8 +124,9 @@ suite('Infra Unit Tests', () => {
                 excludePatterns: [],
                 severity: vscode.DiagnosticSeverity.Error,
                 maxConcurrency: 5,
-                analyzeOnSave: true,
-                analysisDelay: 500
+                incrementalAnalysis: true,
+                analysisDelay: 2000,
+                unusedCodeReanalysisIntervalMinutes: 0
             };
 
             diagnostics.reportUnusedMethod(method, config);

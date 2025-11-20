@@ -10,7 +10,7 @@ Dart's analyzer detects unused private methods (`_method`) but not public ones. 
 ## Features
 
 - Cross-file unused method detection
-- Real-time analysis on file save
+- Real-time analysis on file change
 - Configurable severity levels and exclusions
 - Automatic exclusion of generated files (`.g.dart`, `.freezed.dart`, etc.)
 - Status bar integration
@@ -45,7 +45,7 @@ Manual analysis: `Cmd+Shift+P` → `Dart: Analyze Unused Code`
 | `dartUnusedCode.enabled` | `true` | Enable/disable extension |
 | `dartUnusedCode.severity` | `Warning` | Diagnostic severity (`Error`, `Warning`, `Information`, `Hint`) |
 | `dartUnusedCode.sourceDirectory` | `lib` | Directory to analyze |
-| `dartUnusedCode.analyzeOnSave` | `true` | Analyze on file save |
+| `dartUnusedCode.incrementalAnalysis` | `true` | Incremental analysis on file change |
 | `dartUnusedCode.analysisDelay` | `2000` | Initial analysis delay (ms) |
 | `dartUnusedCode.excludePatterns` | See below | File exclusion patterns |
 | `dartUnusedCode.logLevel` | `INFO` | Log level (`TRACE`, `DEBUG`, `INFO`, `WARN`, `ERROR`, `NONE`) |

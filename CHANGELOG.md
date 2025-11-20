@@ -6,9 +6,11 @@ Format: [Keep a Changelog](https://keepachangelog.com/) | Versioning: [Semantic 
 ### Added
 - periodic reanalysis of unused methods, this improved false positives due to race condition
 - config change listener, this updates the runtime with the changes in configuration
+- composable handlers, with improved merge capabilities
 
 ### Changed
 - rename analysisOnSave to incrementalAnalysis
+- changed listeners to always use fileSystemWatcher
 
 ## [1.1.0] (Prerelease) & [1.2.0] (Release) - 2025-11-18
 
